@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\WaTemplate;
 use App\Models\WaStorefront;
 use App\Support\ZanaStorefrontCurrency;
 use Illuminate\Contracts\Support\Renderable;
@@ -24,7 +25,17 @@ class WaStorefrontController extends Controller
             return redirect('/connect?platform=wa-store');
         }
         $themes = WaStorefront::THEMES;
-        return view('user.store.storefront.edit', compact('sf', 'themes'));
+        $paymentFallbackTemplates = WaTemplate::query()
+            ->forCurrentWorkspace()
+            ->where('meta_status', 'APPROVED')
+            ->where(function ($query) {
+                $query->where('channel', 'waba')
+                    ->orWhereNotNull('meta_template_id');
+            })
+            ->orderBy('template_name')
+            ->get(['id', 'template_name', 'language', 'meta_category', 'template_body']);
+
+        return view('user.store.storefront.edit', compact('sf', 'themes', 'paymentFallbackTemplates'));
     }
 
     public function update(Request $request): RedirectResponse
@@ -61,6 +72,8 @@ class WaStorefrontController extends Controller
             'payment_reference_format' => ['nullable', 'string', 'max:120'],
             'bank_transfer_instructions' => ['nullable', 'string', 'max:500'],
             'external_payment_link' => ['nullable', 'url', 'max:1024'],
+            'payment_instruction_template_id' => ['nullable', 'integer', 'min:1'],
+            'payment_reminder_template_id' => ['nullable', 'integer', 'min:1'],
             // Razorpay API (auto payment links + webhook auto-confirm)
             'rzp_key_id'          => ['nullable', 'string', 'max:191'],
             'rzp_key_secret'      => ['nullable', 'string', 'max:191'],
@@ -88,6 +101,8 @@ class WaStorefrontController extends Controller
             'payment_reference_format' => trim((string) ($data['payment_reference_format'] ?? '')) ?: null,
             'bank_transfer_instructions' => trim((string) ($data['bank_transfer_instructions'] ?? '')) ?: null,
             'external_payment_link' => trim((string) ($data['external_payment_link'] ?? '')) ?: null,
+            'payment_instruction_template_id' => !empty($data['payment_instruction_template_id']) ? (int) $data['payment_instruction_template_id'] : null,
+            'payment_reminder_template_id' => !empty($data['payment_reminder_template_id']) ? (int) $data['payment_reminder_template_id'] : null,
         ], fn ($v) => $v !== null && $v !== '');
 
         if (($data['payment_provider'] ?? null) === 'razorpay_api') {

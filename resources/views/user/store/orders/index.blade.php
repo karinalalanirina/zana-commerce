@@ -27,7 +27,32 @@
                         {{ session('status') }}</div>
                 @endif
 
-                <form method="GET" class="bg-paper-0 border border-paper-200 rounded-[14px] shadow-card">
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+                    @foreach ([
+                        'awaiting_payment' => ['Awaiting Payment', $reportingSummary['awaiting_payment'] ?? 0, 'bg-paper-50 text-ink-700 border-paper-200'],
+                        'customer_says_paid' => ['Customer Says Paid', $reportingSummary['customer_says_paid'] ?? 0, 'bg-[#F3F8FD] text-[#13478A] border-[#D9E5F2]'],
+                        'paid_confirmed' => ['Paid Confirmed', $reportingSummary['paid_confirmed'] ?? 0, 'bg-wa-mint/40 text-wa-deep border-wa-green/30'],
+                        'payment_failed' => ['Payment Failed', $reportingSummary['payment_failed'] ?? 0, 'bg-accent-coral/10 text-accent-coral border-accent-coral/20'],
+                        'refunded' => ['Refunded', $reportingSummary['refunded'] ?? 0, 'bg-paper-50 text-ink-500 border-paper-200'],
+                    ] as $key => [$label, $count, $cls])
+                        <button type="submit" form="zana-orders-filters" name="payment_state" value="{{ $key }}"
+                            class="text-left rounded-2xl border px-4 py-3 shadow-card {{ $cls }}">
+                            <div class="font-mono text-[10px] uppercase tracking-[0.16em] opacity-80">{{ $label }}</div>
+                            <div class="font-serif text-[28px] leading-tight mt-1">{{ number_format($count) }}</div>
+                            <div class="text-[11px] mt-1 opacity-80">
+                                @if ($key === 'customer_says_paid')
+                                    {{ __('Needs review:') }} {{ number_format($reportingSummary['needs_review'] ?? 0) }}
+                                @elseif ($key === 'paid_confirmed')
+                                    {{ __('Refs recorded:') }} {{ number_format($reportingSummary['with_reference'] ?? 0) }}
+                                @else
+                                    {{ __('Tracked in merchant payment workflow') }}
+                                @endif
+                            </div>
+                        </button>
+                    @endforeach
+                </div>
+
+                <form method="GET" id="zana-orders-filters" class="bg-paper-0 border border-paper-200 rounded-[14px] shadow-card">
                     <div class="px-4 py-3 border-b border-paper-200 flex items-center gap-2 flex-wrap">
                         <div class="relative flex-1 min-w-[260px] max-w-[420px]">
                             <svg viewBox="0 0 16 16"
@@ -48,6 +73,13 @@
                                         class="ml-1 font-mono text-[10px] opacity-80">{{ number_format($counts[$k] ?? 0) }}</span></button>
                             @endforeach
                         </div>
+                        <select name="payment_state" onchange="this.form.submit()"
+                            class="px-3 py-2 border border-paper-200 rounded-lg bg-white text-[12.5px] focus:outline-none focus:border-wa-deep">
+                            <option value="all" @selected($paymentState === 'all')>{{ __('All payment states') }}</option>
+                            @foreach (\App\Support\ZanaManualPayment::STATUSES as $merchantPaymentState)
+                                <option value="{{ $merchantPaymentState }}" @selected($paymentState === $merchantPaymentState)>{{ \App\Support\ZanaManualPayment::statusLabel($merchantPaymentState) }}</option>
+                            @endforeach
+                        </select>
                         <select name="source" onchange="this.form.submit()"
                             class="px-3 py-2 border border-paper-200 rounded-lg bg-white text-[12.5px] focus:outline-none focus:border-wa-deep">
                             @foreach (['all' => 'All sources', 'whatsapp_ai' => 'AI Order', 'waba' => 'WABA', 'storefront' => 'Storefront', 'twilio' => 'Twilio', 'manual' => 'Manual'] as $k => $label)
@@ -72,6 +104,8 @@
                                     {{ __('Total') }}</th>
                                 <th class="text-left font-mono text-[10px] uppercase tracking-[0.14em] px-2 py-2.5">
                                     {{ __('Status') }}</th>
+                                <th class="text-left font-mono text-[10px] uppercase tracking-[0.14em] px-2 py-2.5">
+                                    {{ __('Payment') }}</th>
                                 <th class="text-right font-mono text-[10px] uppercase tracking-[0.14em] px-4 py-2.5">
                                     {{ __('Open') }}</th>
                             </tr>
@@ -124,13 +158,37 @@
                                         <span
                                             class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full {{ $cls }} text-[10.5px] font-mono">{{ $o->status }}</span>
                                     </td>
+                                    <td class="px-2 py-3">
+                                        @php
+                                            $merchantPaymentState = \App\Support\ZanaManualPayment::paymentStatus($o);
+                                            $paymentMeta = \App\Support\ZanaManualPayment::paymentMeta($o);
+                                            $paymentClasses = match ($merchantPaymentState) {
+                                                'paid_confirmed' => 'bg-wa-mint text-wa-deep',
+                                                'customer_says_paid' => 'bg-[#D9E5F2] text-[#13478A]',
+                                                'payment_failed', 'refunded' => 'bg-accent-coral/15 text-accent-coral',
+                                                default => 'bg-paper-100 text-ink-700',
+                                            };
+                                        @endphp
+                                        <div class="space-y-1">
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full {{ $paymentClasses }} text-[10.5px] font-mono">{{ \App\Support\ZanaManualPayment::statusLabel($merchantPaymentState) }}</span>
+                                            @if (!empty($paymentMeta['payment_method']))
+                                                <div class="text-[10px] font-mono text-ink-500">{{ \App\Support\ZanaManualPayment::methodLabel($paymentMeta['payment_method']) }}</div>
+                                            @endif
+                                            @if (!empty($paymentMeta['transaction_reference']))
+                                                <div class="text-[10px] font-mono text-ink-500">{{ __('Ref:') }} {{ $paymentMeta['transaction_reference'] }}</div>
+                                            @endif
+                                            @if (\App\Support\ZanaManualPayment::amountReceivedDisplay($o))
+                                                <div class="text-[10px] font-mono text-ink-500">{{ __('Received:') }} {{ \App\Support\ZanaManualPayment::amountReceivedDisplay($o) }}</div>
+                                            @endif
+                                        </div>
+                                    </td>
                                     <td class="px-4 py-3 text-right"><a
                                             href="{{ route('user.store.orders.show', $o->id) }}"
                                             class="text-[11px] text-wa-deep font-semibold hover:underline">Open</a></td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="px-4 py-10 text-center text-ink-500">
+                                    <td colspan="8" class="px-4 py-10 text-center text-ink-500">
                                         <div class="font-serif text-[20px]">{{ __('No orders yet') }}</div>
                                         <p class="mt-1 text-[12.5px]">
                                             {{ __("When customers order from the storefront or via WABA, they'll appear here.") }}

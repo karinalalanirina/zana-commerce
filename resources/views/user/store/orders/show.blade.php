@@ -10,18 +10,14 @@
         $items = $order->items_json ?? [];
         $hideIndiaMerchantPayments = \App\Support\ZanaAfricaPayments::hidesIndiaMerchantPayments();
         $orderMeta = is_array($order->meta_json) ? $order->meta_json : [];
-        $zanaPaymentStep = (string) ($orderMeta['zana_payment_step'] ?? '');
+        $paymentMeta = \App\Support\ZanaManualPayment::paymentMeta($order);
+        $zanaPaymentStep = \App\Support\ZanaManualPayment::paymentStatus($order);
         $paymentInstructions = \App\Support\ZanaAfricaPayments::instructionsText($sf, $order);
         $storedExternalPaymentLink = \App\Support\ZanaAfricaPayments::externalPaymentLink($sf, $order);
-        $paymentStepLabel = match ($zanaPaymentStep) {
-            'awaiting_payment' => __('Awaiting Payment'),
-            'payment_link_sent' => __('Payment Link Sent'),
-            'payment_reminder_sent' => __('Payment Reminder Sent'),
-            'customer_says_paid' => __('Customer Says Paid'),
-            'paid_confirmed' => __('Paid Confirmed'),
-            'payment_failed' => __('Payment Failed'),
-            default => null,
-        };
+        $paymentStepLabel = \App\Support\ZanaManualPayment::statusLabel($zanaPaymentStep);
+        $paymentTimeline = \App\Support\ZanaManualPayment::timeline($order);
+        $paymentCopy = session('zana_payment_copy');
+        $paymentAmountDisplay = \App\Support\ZanaManualPayment::amountReceivedDisplay($order);
     @endphp
     <main class="max-w-none mx-auto px-4 sm:px-6 lg:px-7 py-7">
         <div class="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
@@ -64,6 +60,19 @@
                         class="bg-wa-mint border border-wa-green/30 rounded-lg px-4 py-2 text-[12.5px] text-wa-deep font-mono">
                         {{ session('status') }}</div>
                 @endif
+                @if ($paymentCopy && !empty($paymentCopy['text']))
+                    <div class="bg-paper-0 border border-paper-200 rounded-2xl p-4 shadow-card">
+                        <div class="flex items-start justify-between gap-3 flex-wrap">
+                            <div>
+                                <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-500">{{ $paymentCopy['label'] ?? __('Copy fallback') }}</div>
+                                <div class="text-[12px] text-ink-600 mt-1">{{ __('Native send was unavailable, so this copy-ready message is preserved here for manual use.') }}</div>
+                            </div>
+                            <button type="button" onclick="copyPaymentFallback()" class="px-3 py-1.5 rounded-full border border-wa-deep/30 text-wa-deep text-[12px] font-semibold hover:bg-wa-mint/40">{{ __('Copy text') }}</button>
+                        </div>
+                        <textarea id="zana-payment-copy-text" rows="6" readonly
+                            class="mt-3 w-full px-3 py-2 border border-paper-200 rounded-xl text-[12.5px] bg-paper-50 text-ink-700 focus:outline-none">{{ $paymentCopy['text'] }}</textarea>
+                    </div>
+                @endif
 
                 <div class="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
                     <!-- Items + status -->
@@ -103,9 +112,17 @@
                             @csrf @method('PUT')
                             <input type="hidden" name="payment_action" id="payment-action-input" value="">
                             <h3 class="font-serif text-[18px]">{{ __('Update status') }}</h3>
-                            @if ($paymentStepLabel)
-                                <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-wa-green/30 bg-wa-mint/40 text-[11px] font-semibold text-wa-deep">{{ $paymentStepLabel }}</div>
-                            @endif
+                            <div class="flex items-center gap-2 flex-wrap">
+                                @if ($paymentStepLabel)
+                                    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-wa-green/30 bg-wa-mint/40 text-[11px] font-semibold text-wa-deep">{{ $paymentStepLabel }}</div>
+                                @endif
+                                @if (!empty($paymentMeta['payment_method']))
+                                    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-paper-200 bg-paper-50 text-[11px] font-semibold text-ink-700">{{ \App\Support\ZanaManualPayment::methodLabel($paymentMeta['payment_method']) }}</div>
+                                @endif
+                                @if ($paymentAmountDisplay)
+                                    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-paper-200 bg-paper-50 text-[11px] font-semibold text-ink-700">{{ __('Received:') }} {{ $paymentAmountDisplay }}</div>
+                                @endif
+                            </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <label class="block">
                                     <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Status') }}</span>
@@ -125,10 +142,79 @@
                                         class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] font-mono focus:outline-none focus:border-wa-deep" />
                                 </label>
                             </div>
+                            <div class="rounded-2xl border border-paper-200 bg-paper-50/60 p-4 space-y-3">
+                                <div>
+                                    <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-500">{{ __('Manual payment confirmation') }}</div>
+                                    <div class="text-[12px] text-ink-600 mt-1">{{ __('Record what the customer said, how they paid, the reference used, and what your team has confirmed so far.') }}</div>
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <label class="block">
+                                        <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Merchant payment status') }}</span>
+                                        <select name="zana_payment_status"
+                                            class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] focus:outline-none focus:border-wa-deep">
+                                            @foreach (\App\Support\ZanaManualPayment::STATUSES as $paymentState)
+                                                <option value="{{ $paymentState }}" @selected($zanaPaymentStep === $paymentState)>{{ \App\Support\ZanaManualPayment::statusLabel($paymentState) }}</option>
+                                            @endforeach
+                                        </select>
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Payment method') }}</span>
+                                        <select name="zana_payment_method"
+                                            class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] focus:outline-none focus:border-wa-deep">
+                                            <option value="">{{ __('Select method') }}</option>
+                                            @foreach (\App\Support\ZanaManualPayment::METHODS as $paymentMethod)
+                                                <option value="{{ $paymentMethod }}" @selected(($paymentMeta['payment_method'] ?? '') === $paymentMethod)>{{ \App\Support\ZanaManualPayment::methodLabel($paymentMethod) }}</option>
+                                            @endforeach
+                                        </select>
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Transaction / reference code') }}</span>
+                                        <input type="text" name="zana_payment_reference" maxlength="120"
+                                            value="{{ old('zana_payment_reference', $paymentMeta['transaction_reference'] ?? '') }}"
+                                            placeholder="RFG123ABC"
+                                            class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] font-mono focus:outline-none focus:border-wa-deep" />
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Amount received') }}</span>
+                                        <input type="text" name="zana_amount_received" maxlength="40"
+                                            value="{{ old('zana_amount_received', $paymentMeta['amount_received'] ?? '') }}"
+                                            placeholder="2500.00"
+                                            class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] font-mono focus:outline-none focus:border-wa-deep" />
+                                    </label>
+                                    <label class="block sm:col-span-2">
+                                        <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Payer phone / payer note') }}</span>
+                                        <input type="text" name="zana_payer_note" maxlength="255"
+                                            value="{{ old('zana_payer_note', $paymentMeta['payer_note'] ?? '') }}"
+                                            placeholder="+2547..., paid from spouse phone, branch deposit, or other clue"
+                                            class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] focus:outline-none focus:border-wa-deep" />
+                                    </label>
+                                </div>
+                                <label class="block">
+                                    <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Internal confirmation note') }}</span>
+                                    <textarea name="zana_confirmation_note" rows="3" maxlength="1000"
+                                        class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] focus:outline-none focus:border-wa-deep">{{ old('zana_confirmation_note', $paymentMeta['confirmation_note'] ?? '') }}</textarea>
+                                </label>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[12px] text-ink-600">
+                                    <div class="rounded-xl border border-paper-200 bg-paper-0 px-3 py-2">
+                                        <div class="font-semibold text-ink-700">{{ __('Customer says paid') }}</div>
+                                        <div class="mt-1">{{ !empty($paymentMeta['customer_says_paid_at']) ? \App\Support\ZanaManualPayment::displayAt($paymentMeta['customer_says_paid_at']) : __('Not recorded yet') }}</div>
+                                        @if (!empty($paymentMeta['customer_says_paid_by']))
+                                            <div class="text-[11px] text-ink-500">{{ __('Recorded by') }} {{ $paymentMeta['customer_says_paid_by'] }}</div>
+                                        @endif
+                                    </div>
+                                    <div class="rounded-xl border border-paper-200 bg-paper-0 px-3 py-2">
+                                        <div class="font-semibold text-ink-700">{{ __('Paid confirmed') }}</div>
+                                        <div class="mt-1">{{ !empty($paymentMeta['confirmed_at']) ? \App\Support\ZanaManualPayment::displayAt($paymentMeta['confirmed_at']) : __('Not confirmed yet') }}</div>
+                                        @if (!empty($paymentMeta['confirmed_by']))
+                                            <div class="text-[11px] text-ink-500">{{ __('Confirmed by') }} {{ $paymentMeta['confirmed_by'] }}</div>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
                             <label class="block">
                                 <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Payment workflow') }}</span>
                                 <div class="mt-1 rounded-xl border border-paper-200 bg-paper-50 px-3 py-3 text-[12px] text-ink-600">
-                                    {{ __('Visible launch labels map to the current backend safely: Awaiting Payment → pending, Customer Says Paid → confirmed, Paid Confirmed → paid, Payment Failed → cancelled.') }}
+                                    {{ __('Visible launch labels map to the current backend safely: Awaiting Payment → pending, Customer Says Paid → confirmed, Paid Confirmed → paid, Payment Failed / Refunded → cancelled. Native send is attempted first; copy fallback appears if delivery is unavailable.') }}
                                 </div>
                             </label>
                             @if ($paymentInstructions)
@@ -160,6 +246,8 @@
                                     class="px-3 py-1.5 border border-paper-200 rounded-full text-[12px] hover:bg-paper-50">{{ __('Mark paid confirmed') }}</button>
                                 <button type="button" onclick="submitPaymentAction('payment_failed')"
                                     class="px-3 py-1.5 border border-paper-200 rounded-full text-[12px] hover:bg-paper-50">{{ __('Mark payment failed') }}</button>
+                                <button type="button" onclick="submitPaymentAction('refunded')"
+                                    class="px-3 py-1.5 border border-paper-200 rounded-full text-[12px] hover:bg-paper-50">{{ __('Mark refunded') }}</button>
                                 @if (!$hideIndiaMerchantPayments)
                                 <button type="button" onclick="generatePaymentLink()"
                                     class="px-3 py-1.5 border border-wa-deep/40 text-wa-deep rounded-full text-[12px] hover:bg-wa-mint/40 font-semibold">{{ __('Generate Razorpay link + send') }}</button>
@@ -308,6 +396,63 @@
                                 </div>
                             </dl>
                         </div>
+
+                        <div class="bg-paper-0 border border-paper-200 rounded-2xl p-4 shadow-card">
+                            <div class="flex items-start justify-between gap-2">
+                                <div>
+                                    <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-500">{{ __('Payment history') }}</div>
+                                    <div class="text-[12px] text-ink-600 mt-1">{{ __('Track instructions, reminders, customer-paid claims, references, and merchant confirmation in one place.') }}</div>
+                                </div>
+                            </div>
+                            @if (count($paymentTimeline))
+                                <div class="mt-3 space-y-3">
+                                    @foreach ($paymentTimeline as $event)
+                                        @php
+                                            $tone = \App\Support\ZanaManualPayment::eventTone((string) ($event['type'] ?? ''));
+                                            $toneClasses = match ($tone) {
+                                                'success' => 'border-wa-green/30 bg-wa-mint/30',
+                                                'danger' => 'border-accent-coral/20 bg-accent-coral/10',
+                                                'info' => 'border-[#D9E5F2] bg-[#F3F8FD]',
+                                                default => 'border-paper-200 bg-paper-50',
+                                            };
+                                        @endphp
+                                        <div class="rounded-xl border {{ $toneClasses }} px-3 py-3">
+                                            <div class="flex items-start justify-between gap-2">
+                                                <div class="font-semibold text-[12.5px] text-ink-900">{{ $event['label'] ?? \App\Support\ZanaManualPayment::eventLabel((string) ($event['type'] ?? '')) }}</div>
+                                                <div class="text-[10.5px] font-mono text-ink-500">{{ \App\Support\ZanaManualPayment::displayAt($event['at'] ?? null) ?? ($event['at'] ?? '') }}</div>
+                                            </div>
+                                            <div class="mt-1 text-[11.5px] text-ink-600 space-y-1">
+                                                @if (!empty($event['payment_status']))
+                                                    <div>{{ __('State:') }} {{ \App\Support\ZanaManualPayment::statusLabel($event['payment_status']) }}</div>
+                                                @endif
+                                                @if (!empty($event['payment_method']))
+                                                    <div>{{ __('Method:') }} {{ \App\Support\ZanaManualPayment::methodLabel($event['payment_method']) }}</div>
+                                                @endif
+                                                @if (!empty($event['transaction_reference']))
+                                                    <div>{{ __('Reference:') }} <span class="font-mono">{{ $event['transaction_reference'] }}</span></div>
+                                                @endif
+                                                @if (!empty($event['amount_received_display']))
+                                                    <div>{{ __('Amount:') }} {{ $event['amount_received_display'] }}</div>
+                                                @endif
+                                                @if (!empty($event['send_error']))
+                                                    <div>{{ __('Send note:') }} {{ $event['send_error'] }}</div>
+                                                @endif
+                                                @if (!empty($event['note']))
+                                                    <div>{{ __('Note:') }} {{ $event['note'] }}</div>
+                                                @endif
+                                                @if (!empty($event['actor_name']))
+                                                    <div class="text-[11px] text-ink-500">{{ __('By') }} {{ $event['actor_name'] }}</div>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @else
+                                <div class="mt-3 rounded-xl border border-paper-200 bg-paper-50 px-3 py-3 text-[12px] text-ink-500">
+                                    {{ __('No payment events recorded yet. Send instructions, record a reference, or confirm payment to start the timeline.') }}
+                                </div>
+                            @endif
+                        </div>
                     </aside>
                 </div>
             </section>
@@ -315,6 +460,14 @@
     </main>
 
     <script>
+        function copyPaymentFallback() {
+            const el = document.getElementById('zana-payment-copy-text');
+            if (!el) return;
+            el.select();
+            el.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(el.value);
+        }
+
         function submitPaymentAction(action) {
             const input = document.getElementById('payment-action-input');
             if (input) {
@@ -338,7 +491,16 @@
                 }),
             });
             const j = await r.json();
-            alert(j.ok ? 'Payment link sent.' : 'Failed to send.');
+            if (j.ok) {
+                alert('Payment link sent.');
+                return;
+            }
+            if (j.fallback_text) {
+                await navigator.clipboard.writeText(j.fallback_text);
+                alert((j.error || 'Native send unavailable.') + ' The payment link message has been copied for manual sending.');
+                return;
+            }
+            alert('Failed to send.');
         }
         async function generatePaymentLink() {
             const r = await fetch(@json(route('user.store.orders.generate-payment-link', $order->id)), {

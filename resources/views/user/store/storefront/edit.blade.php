@@ -321,6 +321,32 @@
                                     placeholder="Hi {customer_name}, your order {order_id} is awaiting payment. Use M-Pesa Till {mpesa_till} or Paybill {mpesa_paybill}. Reference: {payment_reference}. Payment link: {external_payment_link}">{{ old('default_payment_instructions_template', $pay['default_payment_instructions_template'] ?? '') }}</textarea>
                                 <span class="text-[10.5px] text-ink-500 mt-1 block">{{ __('Available placeholders: {customer_name}, {order_id}, {order_total}, {business_name}, {mpesa_till}, {mpesa_paybill}, {payment_reference}, {external_payment_link}, {bank_transfer_instructions}, {accepted_payment_methods}.') }}</span>
                             </label>
+                            <label class="block">
+                                <span class="text-[11.5px] font-semibold text-ink-700">{{ __('24-hour fallback template for payment instructions') }}</span>
+                                <select name="payment_instruction_template_id"
+                                    class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] focus:outline-none focus:border-wa-deep focus:ring-4 focus:ring-wa-deep/10">
+                                    <option value="">{{ __('Choose approved Meta template') }}</option>
+                                    @foreach ($paymentFallbackTemplates as $template)
+                                        <option value="{{ $template->id }}" @selected((int) old('payment_instruction_template_id', $pay['payment_instruction_template_id'] ?? 0) === (int) $template->id)>
+                                            {{ $template->template_name }} @if($template->language) · {{ $template->language }} @endif @if($template->meta_category) · {{ strtoupper($template->meta_category) }} @endif
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <span class="text-[10.5px] text-ink-500 mt-1 block">{{ __('Used only when freeform WhatsApp sending is blocked by the 24-hour rule. Best practice: use an approved utility template whose first body variable can carry the full payment message.') }}</span>
+                            </label>
+                            <label class="block">
+                                <span class="text-[11.5px] font-semibold text-ink-700">{{ __('24-hour fallback template for payment reminders') }}</span>
+                                <select name="payment_reminder_template_id"
+                                    class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] focus:outline-none focus:border-wa-deep focus:ring-4 focus:ring-wa-deep/10">
+                                    <option value="">{{ __('Choose approved Meta template') }}</option>
+                                    @foreach ($paymentFallbackTemplates as $template)
+                                        <option value="{{ $template->id }}" @selected((int) old('payment_reminder_template_id', $pay['payment_reminder_template_id'] ?? 0) === (int) $template->id)>
+                                            {{ $template->template_name }} @if($template->language) · {{ $template->language }} @endif @if($template->meta_category) · {{ strtoupper($template->meta_category) }} @endif
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <span class="text-[10.5px] text-ink-500 mt-1 block">{{ __('Use a reminder-safe approved template here if you want Zana to reopen the conversation compliantly instead of forcing operators to copy a reminder manually.') }}</span>
+                            </label>
                         </div>
 
                         {{-- Razorpay API keys — only used when provider = "Razorpay (auto-generate)".
