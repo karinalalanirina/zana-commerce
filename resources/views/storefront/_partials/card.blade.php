@@ -1,6 +1,8 @@
 @php
     /** @var \App\Models\WaProduct $p */
-    $onSale = $p->compare_price_minor && $p->compare_price_minor > $p->price_minor;
+    $storefrontPriceMinor = $p->storefrontPriceMinor($sf);
+    $storefrontCompareMinor = $p->storefrontComparePriceMinor($sf);
+    $onSale = $storefrontCompareMinor && $storefrontCompareMinor > $storefrontPriceMinor;
     $isNew = optional($p->created_at)->gt(now()->subDays(14));
     // Theme tokens — self-derived so the card works both inside the shop grid
     // and standalone in the show-more AJAX partial (no base scope there).
@@ -9,7 +11,7 @@
     $accent = $accent ?? ($theme['accent'] ?? $brand);
 @endphp
 <div class="card sf-card-pos" data-product-id="{{ $p->id }}" data-product-name="{{ strtolower($p->name) }}"
-    data-product-cat="{{ $p->category }}" data-product-price="{{ $p->price_minor }}">
+    data-product-cat="{{ $p->category }}" data-product-price="{{ $storefrontPriceMinor }}">
     <a href="{{ url('/s/' . $sf->slug . '/p/' . $p->slug) }}" class="img">
         @php $sfFallbackSvg = '<span class="sf-img-fallback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/></svg></span>'; @endphp
         @if ($p->image_url)
@@ -20,7 +22,7 @@
         @endif
         <span class="sf-card-badge">
             @if ($onSale)
-                <span>−{{ (int) round((($p->compare_price_minor - $p->price_minor) / $p->compare_price_minor) * 100) }}%</span>
+                <span>−{{ (int) round((($storefrontCompareMinor - $storefrontPriceMinor) / $storefrontCompareMinor) * 100) }}%</span>
             @endif
             @if ($isNew)
                 <span style="background:{{ $accent }}">{{ __('New') }}</span>
@@ -49,13 +51,13 @@
         @endif
         <h3><a href="{{ url('/s/' . $sf->slug . '/p/' . $p->slug) }}">{{ $p->name }}</a></h3>
         <div class="price">
-            <b>{{ $p->price_display }}</b>
+            <b>{{ $p->storefrontPriceDisplay($sf) }}</b>
             @if ($onSale)
-                <span class="sf-card-was">{{ $p->compare_price_display }}</span>
+                <span class="sf-card-was">{{ $p->storefrontComparePriceDisplay($sf) }}</span>
             @endif
         </div>
         <button class="add" @disabled(!$p->in_stock)
-            onclick="STOREFRONT.add({{ $p->id }}, {{ json_encode($p->name) }}, {{ $p->price_minor }}, {{ json_encode($p->image_url) }})">
+            onclick="STOREFRONT.add({{ $p->id }}, {{ json_encode($p->name) }}, {{ $storefrontPriceMinor }}, {{ json_encode($p->image_url) }})">
             @if ($p->in_stock)
                 Add to cart
             @else

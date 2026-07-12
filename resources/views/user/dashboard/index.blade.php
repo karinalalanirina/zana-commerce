@@ -12,9 +12,347 @@
         };
     </script>
 
-    <!-- ========== TOP BAR ========== -->
+    @php
+        $zanaSummary = $zanaDashboardSummary ?? [];
+        $zanaTopProducts = $zanaSummary['top_products'] ?? [];
+        $urgentItems = [
+            ['label' => __('Clients waiting for reply'), 'value' => (int) ($zanaSummary['unassigned_inbox_count'] ?? 0)],
+            ['label' => __('Payments to follow up'), 'value' => (int) ($zanaSummary['orders_awaiting_payment'] ?? 0)],
+            ['label' => __('Orders awaiting fulfillment'), 'value' => (int) ($zanaSummary['orders_in_progress'] ?? 0)],
+            ['label' => __('Orders awaiting delivery'), 'value' => 0],
+            ['label' => __('AI review items'), 'value' => max(0, (int) ($copilotActive ?? 0) > 0 ? 1 : 0)],
+            ['label' => __('Follow-ups due'), 'value' => (int) $broadcastsScheduled],
+        ];
+    @endphp
 
+    <section class="max-w-none mx-auto px-4 sm:px-6 lg:px-7 pt-5 md:pt-7 pb-5">
+        <div class="min-w-0">
+            <div class="flex items-center gap-2 mb-2 text-[11px] font-mono uppercase tracking-[0.18em] text-ink-500">
+                <span>{{ __('Operator Dashboard') }}</span>
+                <span>·</span>
+                <span>{{ now()->format('H:i') }}</span>
+                <span>·</span>
+                <span>{{ __('Nairobi') }}</span>
+            </div>
+            <h1 class="text-[34px] md:text-[52px] leading-[1.02] tracking-[-0.03em] text-ink-900">
+                <span class="font-sans font-semibold">{{ $greeting }}, {{ $userName }}.</span>
+                <span class="font-serif italic text-ink-500">{{ __('Workspace is calm.') }}</span>
+            </h1>
+            <p class="mt-2 max-w-2xl text-[13px] text-ink-600">
+                {{ $today }} · {{ __('Last 7 days showing :sent outbound, :deliverability deliverability across :devices connected devices.', ['sent' => number_format((int) $sent24h), 'deliverability' => $deliverabilityPct . '%', 'devices' => number_format((int) $devicesActive)]) }}
+            </p>
+        </div>
 
+        <div class="mt-6 flex items-center gap-2 flex-wrap">
+            <button type="button" id="dash-export"
+                class="px-4 py-2 hairline border border-paper-200 rounded-full bg-paper-0 text-[12px] font-medium hover:bg-paper-50 flex items-center gap-2">
+                <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor"
+                    stroke-width="1.5">
+                    <path d="M8 2v8m0 0L5 7m3 3 3-3M3 13h10" />
+                </svg>
+                Export
+            </button>
+            <div class="relative" id="dash-range-wrap">
+                <button type="button" id="dash-range-btn"
+                    class="px-4 py-2 hairline border border-paper-200 rounded-full bg-paper-0 text-[12px] font-medium hover:bg-paper-50 flex items-center gap-1.5">
+                    <span id="dash-range-label">{{ __('Last 7 days') }}</span>
+                    <svg viewBox="0 0 16 16" class="w-3 h-3" fill="none" stroke="currentColor"
+                        stroke-width="1.8">
+                        <path d="M4 6l4 4 4-4" />
+                    </svg>
+                </button>
+                <div id="dash-range-menu"
+                    class="hidden absolute right-0 mt-1 w-40 z-30 bg-paper-0 border border-paper-200 rounded-xl shadow-soft overflow-hidden py-1">
+                    <button type="button"
+                        class="dash-range-opt w-full text-left px-3 py-1.5 text-[12px] hover:bg-paper-50"
+                        data-range="24h">{{ __('Last 24 hours') }}</button>
+                    <button type="button"
+                        class="dash-range-opt w-full text-left px-3 py-1.5 text-[12px] hover:bg-paper-50"
+                        data-range="7d">{{ __('Last 7 days') }}</button>
+                    <button type="button"
+                        class="dash-range-opt w-full text-left px-3 py-1.5 text-[12px] hover:bg-paper-50"
+                        data-range="30d">{{ __('Last 30 days') }}</button>
+                    <button type="button"
+                        class="dash-range-opt w-full text-left px-3 py-1.5 text-[12px] hover:bg-paper-50"
+                        data-range="qtd">{{ __('Quarter to date') }}</button>
+                </div>
+            </div>
+            <a href="{{ url('/wa-campaigns/create') }}" data-tour="new-campaign"
+                class="px-4 py-2 rounded-full bg-wa-deep text-paper-0 text-[12px] font-medium hover:bg-wa-teal flex items-center gap-2">
+                <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor"
+                    stroke-width="1.8">
+                    <path d="M8 3v10M3 8h10" />
+                </svg>
+                New campaign
+            </a>
+        </div>
+
+        <section class="mt-6 rounded-[26px] border border-paper-200 bg-paper-0 p-4 sm:p-5 shadow-card">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-500">{{ __('Today\'s Pulse') }}</div>
+                    <div class="mt-2 text-[28px] font-semibold leading-tight text-ink-900">{{ __('Your WhatsApp business, at a glance') }}</div>
+                    <div class="mt-1 max-w-3xl text-[12px] text-ink-500">
+                        {{ __('This summary surfaces customer demand, payment follow-up, and order momentum first. Advanced tooling remains available lower on the page.') }}
+                    </div>
+                </div>
+                <div class="rounded-2xl border border-paper-200 bg-paper-50 px-4 py-3 text-[12px] text-ink-600">
+                    <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-500">{{ __('Window') }}</div>
+                    <div class="mt-1">{{ __('Today so far') }}</div>
+                </div>
+            </div>
+            <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                @foreach ([
+                    ['label' => __('Messages today'), 'value' => number_format((int) $sent24h), 'meta' => __('Total message activity across inbox and sends'), 'icon' => 'message', 'delta' => $deltaSent > 0 ? '+' . rtrim(rtrim(number_format($deltaSent, 1), '0'), '.') . '%' : '+0%'],
+                    ['label' => __('New customers'), 'value' => number_format((int) $newContacts), 'meta' => __('Contacts added to this workspace today'), 'icon' => 'users', 'delta' => $deltaContacts > 0 ? '+' . rtrim(rtrim(number_format($deltaContacts, 1), '0'), '.') . '%' : '+0%'],
+                    ['label' => __('Orders created'), 'value' => number_format((int) ($zanaSummary['today_orders_count'] ?? 0)), 'meta' => __('Paid today: :count', ['count' => number_format((int) ($zanaSummary['paid_orders_count'] ?? 0))]), 'icon' => 'orders', 'delta' => (int) ($zanaSummary['today_orders_count'] ?? 0) > 0 ? (string) (int) ($zanaSummary['today_orders_count'] ?? 0) : '0'],
+                    ['label' => __('Today\'s revenue'), 'value' => $zanaSummary['today_sales_display'] ?? \App\Support\FormatSettings::formatIn(0, 'USD'), 'meta' => __('Pending payment: :amount', ['amount' => $zanaSummary['today_sales_display'] ?? \App\Support\FormatSettings::formatIn(0, 'USD')]), 'icon' => 'revenue', 'delta' => '+0%'],
+                ] as $pulse)
+                    <div @class([
+                        'rounded-[20px] border p-4',
+                        'border-wa-green/25 bg-wa-bubble/45' => $pulse['icon'] === 'revenue',
+                        'border-paper-200 bg-paper-0' => $pulse['icon'] !== 'revenue',
+                    ])>
+                        <div class="flex items-center justify-between gap-3">
+                            <span class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-wa-mint text-wa-deep">
+                                @if ($pulse['icon'] === 'message')
+                                    <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="10" height="8" rx="2" /><path d="M5.5 11.2 4.5 13l2.3-1" /></svg>
+                                @elseif ($pulse['icon'] === 'users')
+                                    <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5.8 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm4.4 1a1.8 1.8 0 1 0 0-3.6A1.8 1.8 0 0 0 10.2 8Z" /><path d="M2.8 12.5c.4-1.9 1.8-2.8 4-2.8s3.6.9 4 2.8M10.1 9.9c1.7 0 2.7.7 3.1 2.1" /></svg>
+                                @elseif ($pulse['icon'] === 'orders')
+                                    <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 3.5h8v9H4z" /><path d="M6 6.5h4M6 8.8h4" /></svg>
+                                @else
+                                    <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3.5" width="10" height="8.5" rx="1.5" /><path d="M5.2 6.8h5.6M5.2 8.9h5.6" /></svg>
+                                @endif
+                            </span>
+                            <span class="rounded-full bg-wa-mint/70 px-2 py-0.5 text-[10px] font-mono text-wa-deep">{{ $pulse['delta'] }}</span>
+                        </div>
+                        <div class="mt-4 text-[10px] font-mono uppercase tracking-[0.18em] text-ink-500">{{ $pulse['label'] }}</div>
+                        <div class="mt-2 font-serif text-[22px] leading-none text-ink-900">{{ $pulse['value'] }}</div>
+                        <div class="mt-3 text-[11px] leading-5 text-ink-500">{{ $pulse['meta'] }}</div>
+                    </div>
+                @endforeach
+            </div>
+            <div class="mt-4 grid gap-3 md:grid-cols-2">
+                <div class="rounded-2xl border border-paper-200 bg-paper-0 p-4">
+                    <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-500">{{ __('Chat-to-order conversion') }}</div>
+                    <div class="mt-2 text-[22px] font-semibold text-ink-900">—</div>
+                    <div class="mt-2 text-[12px] text-ink-500">{{ __('Approximation based on conversations with inbound activity today.') }}</div>
+                </div>
+                <div class="rounded-2xl border border-paper-200 bg-paper-0 p-4">
+                    <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-500">{{ __('Order-to-payment conversion') }}</div>
+                    <div class="mt-2 text-[22px] font-semibold text-ink-900">—</div>
+                    <div class="mt-2 text-[12px] text-ink-500">{{ __('Share of today’s orders already paid or processing.') }}</div>
+                </div>
+            </div>
+        </section>
+
+        <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <section class="rounded-[26px] border border-paper-200 bg-paper-0 p-6 shadow-card">
+                <div class="flex items-center justify-between gap-3">
+                    <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-500">{{ __('Urgent Actions') }}</div>
+                    <a href="{{ url('/team-inbox') }}" class="text-[12px] font-semibold text-wa-deep hover:underline">{{ __('Open Inbox') }}</a>
+                </div>
+                <div class="mt-3 text-[20px] font-semibold text-ink-900">{{ __('What needs attention now') }}</div>
+                <div class="mt-4 space-y-0.5">
+                    @foreach ($urgentItems as $item)
+                        <a href="{{ url('/team-inbox') }}"
+                            class="flex items-start justify-between gap-3 border-b border-paper-100 px-1 py-3 last:border-b-0 transition hover:text-wa-deep">
+                            <span class="min-w-0">
+                                <span class="block text-[13px] font-medium text-ink-800">{{ $item['label'] }}</span>
+                                <span class="block mt-0.5 text-[11px] text-ink-500">{{ __('Open live watch in Zana workspace') }}</span>
+                            </span>
+                            <span class="pt-1 text-[22px] font-semibold tabular-nums {{ $item['value'] > 0 ? 'text-[#A1431F]' : 'text-ink-400' }}">{{ number_format($item['value']) }}</span>
+                        </a>
+                    @endforeach
+                </div>
+            </section>
+
+            <section class="rounded-[26px] border border-paper-200 bg-paper-0 p-6 shadow-card">
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-500">{{ __('Inbox Overview') }}</div>
+                        <div class="mt-1 text-[20px] font-semibold text-ink-900">{{ __('Conversation health') }}</div>
+                    </div>
+                    <a href="{{ url('/team-inbox') }}" class="text-[12px] font-semibold text-wa-deep hover:underline">{{ __('Inbox') }}</a>
+                </div>
+                <div class="mt-4 grid grid-cols-2 gap-3">
+                    @foreach ([
+                        ['label' => __('Open conversations'), 'value' => (int) ($zanaSummary['open_inbox_count'] ?? 0)],
+                        ['label' => __('Unassigned'), 'value' => (int) ($zanaSummary['unassigned_inbox_count'] ?? 0)],
+                        ['label' => __('Assigned'), 'value' => (int) ($zanaSummary['assigned_inbox_count'] ?? 0)],
+                        ['label' => __('Waiting on merchant'), 'value' => 0],
+                        ['label' => __('Waiting on customer'), 'value' => 0],
+                        ['label' => __('Resolved today'), 'value' => 0],
+                    ] as $metric)
+                        <div class="rounded-2xl bg-paper-50 px-4 py-4">
+                            <div class="text-[10px] font-mono uppercase tracking-[0.16em] text-ink-500">{{ $metric['label'] }}</div>
+                            <div class="mt-2 font-serif text-[30px] leading-none text-ink-900">{{ number_format($metric['value']) }}</div>
+                        </div>
+                    @endforeach
+                </div>
+                <div class="mt-4 text-[11px] text-ink-500">{{ __('Average first response time — no data yet') }}</div>
+            </section>
+
+            <section class="rounded-[26px] border border-paper-200 bg-paper-0 p-6 shadow-card">
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-500">{{ __('Orders & Payments') }}</div>
+                        <div class="mt-1 text-[20px] font-semibold text-ink-900">{{ __('Sales workflow') }}</div>
+                    </div>
+                    <a href="{{ url('/store/orders') }}" class="text-[12px] font-semibold text-wa-deep hover:underline">{{ __('Orders') }}</a>
+                </div>
+                <div class="mt-4 grid grid-cols-2 gap-3">
+                    @foreach ([
+                        ['label' => __('New orders'), 'value' => (int) ($zanaSummary['today_orders_count'] ?? 0)],
+                        ['label' => __('Awaiting payment'), 'value' => (int) ($zanaSummary['orders_awaiting_payment'] ?? 0)],
+                        ['label' => __('Paid orders'), 'value' => (int) ($zanaSummary['paid_orders_count'] ?? 0)],
+                        ['label' => __('In progress'), 'value' => (int) ($zanaSummary['orders_in_progress'] ?? 0)],
+                        ['label' => __('Delivered'), 'value' => 0],
+                        ['label' => __('Cancelled'), 'value' => 0],
+                    ] as $metric)
+                        <div class="rounded-2xl bg-paper-50 px-4 py-4">
+                            <div class="text-[10px] font-mono uppercase tracking-[0.16em] text-ink-500">{{ $metric['label'] }}</div>
+                            <div class="mt-2 font-serif text-[30px] leading-none text-ink-900">{{ number_format($metric['value']) }}</div>
+                        </div>
+                    @endforeach
+                </div>
+                <div class="mt-4 rounded-2xl border border-paper-200 px-4 py-3">
+                    <div class="text-[10px] font-mono uppercase tracking-[0.16em] text-ink-500">{{ __('Expected payment total') }}</div>
+                    <div class="mt-1 font-serif text-[28px] leading-none">{{ $zanaSummary['today_sales_display'] ?? \App\Support\FormatSettings::formatIn(0, 'USD') }}</div>
+                </div>
+            </section>
+        </div>
+
+        <div class="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <section class="rounded-[26px] border border-paper-200 bg-paper-0 p-6 shadow-card">
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-500">{{ __('AI Assistant Activity') }}</div>
+                        <div class="mt-1 text-[20px] font-semibold text-ink-900">{{ __('AI status') }}</div>
+                    </div>
+                    <span class="rounded-full bg-wa-mint px-2.5 py-1 text-[10px] font-mono text-wa-deep">{{ __('AI Assistant online') }}</span>
+                </div>
+                <div class="mt-4 grid grid-cols-2 gap-3">
+                    @foreach ([
+                        ['label' => __('AI-assisted flows'), 'value' => (int) ($copilotFlows ?? 0)],
+                        ['label' => __('AI review items'), 'value' => max(0, (int) ($copilotActive ?? 0) > 0 ? 1 : 0)],
+                        ['label' => __('Auto-drafts in 24 hrs'), 'value' => 0],
+                        ['label' => __('Escalations previous 24 hrs'), 'value' => 0],
+                    ] as $metric)
+                        <div class="rounded-2xl bg-paper-50 px-4 py-4">
+                            <div class="text-[10px] font-mono uppercase tracking-[0.16em] text-ink-500">{{ $metric['label'] }}</div>
+                            <div class="mt-2 font-serif text-[30px] leading-none text-ink-900">{{ number_format($metric['value']) }}</div>
+                        </div>
+                    @endforeach
+                </div>
+                <p class="mt-4 text-[11px] leading-5 text-ink-500">
+                    {{ __("This block only reflects assistant approvals; it does not currently sync automations. We'll fold the current ops table into that.") }}
+                </p>
+            </section>
+
+            <section class="rounded-[26px] border border-paper-200 bg-paper-0 p-6 shadow-card">
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-500">{{ __('Campaigns & Follow-ups') }}</div>
+                        <div class="mt-1 text-[20px] font-semibold text-ink-900">{{ __('Growth activity') }}</div>
+                    </div>
+                    <a href="{{ url('/wa-campaigns') }}" class="text-[12px] font-semibold text-wa-deep hover:underline">{{ __('Campaigns') }}</a>
+                </div>
+                <div class="mt-4 grid grid-cols-2 gap-3">
+                    @foreach ([
+                        ['label' => __('Active campaigns'), 'value' => (int) $broadcastsRunning],
+                        ['label' => __('Scheduled campaigns'), 'value' => (int) $broadcastsScheduled],
+                        ['label' => __('Paused / failed'), 'value' => (int) $broadcastsPaused],
+                        ['label' => __('Total sent signals'), 'value' => (int) $sent24h],
+                    ] as $metric)
+                        <div class="rounded-2xl bg-paper-50 px-4 py-4">
+                            <div class="text-[10px] font-mono uppercase tracking-[0.16em] text-ink-500">{{ $metric['label'] }}</div>
+                            <div class="mt-2 font-serif text-[30px] leading-none text-ink-900">{{ number_format($metric['value']) }}</div>
+                        </div>
+                    @endforeach
+                </div>
+                <div class="mt-4 rounded-2xl border border-paper-200 px-4 py-6 text-center text-[12px] text-ink-500">
+                    {{ __('No campaign activity yet — start your first broadcast to see performance here.') }}
+                </div>
+            </section>
+        </div>
+
+        <div class="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <section class="rounded-[26px] border border-paper-200 bg-paper-0 p-6 shadow-card">
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-500">{{ __('Top Products') }}</div>
+                        <div class="mt-1 text-[20px] font-semibold text-ink-900">{{ __('What customers ask for most') }}</div>
+                    </div>
+                    <a href="{{ url('/store/products') }}" class="text-[12px] font-semibold text-wa-deep hover:underline">{{ __('Catalog') }}</a>
+                </div>
+                <div class="mt-4 space-y-3">
+                    @forelse ($zanaTopProducts as $product)
+                        <div class="flex items-center justify-between gap-3 rounded-2xl border border-paper-200 px-4 py-4">
+                            <span class="truncate text-[14px] text-ink-800">{{ $product['name'] }}</span>
+                            <span class="rounded-full bg-paper-50 px-3 py-1 text-[11px] font-mono text-ink-500">
+                                {{ $product['qty'] > 0 ? number_format($product['qty']) . ' sold' : __('catalog') }}
+                            </span>
+                        </div>
+                    @empty
+                        <div class="rounded-2xl border border-dashed border-paper-200 px-4 py-6 text-[12px] text-ink-500">
+                            {{ __('No products yet') }}
+                            <div class="mt-1">{{ __('Add items to your catalog to see demand ranked here.') }}</div>
+                        </div>
+                    @endforelse
+                </div>
+            </section>
+
+            <section class="rounded-[26px] border border-paper-200 bg-paper-0 p-6 shadow-card">
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-500">{{ __('Team Performance') }}</div>
+                        <div class="mt-1 text-[20px] font-semibold text-ink-900">{{ __('Who is moving conversations forward') }}</div>
+                    </div>
+                    <a href="{{ url('/team-inbox/analytics/team') }}" class="text-[12px] font-semibold text-wa-deep hover:underline">{{ __('Team') }}</a>
+                </div>
+                <div class="mt-4 overflow-hidden rounded-2xl border border-paper-200">
+                    <div class="grid grid-cols-[minmax(0,1.5fr)_1fr_1fr_1fr] gap-0 bg-paper-50 px-4 py-3 text-[10px] font-mono uppercase tracking-[0.16em] text-ink-500">
+                        <div>{{ __('Operator') }}</div>
+                        <div>{{ __('Open deals') }}</div>
+                        <div>{{ __('Resolved this week') }}</div>
+                        <div>{{ __('Win rate') }}</div>
+                    </div>
+                    <div class="grid grid-cols-[minmax(0,1.5fr)_1fr_1fr_1fr] gap-0 px-4 py-4 text-[13px] text-ink-800">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-wa-mint text-[11px] font-semibold text-wa-deep">
+                                {{ strtoupper(substr($userName, 0, 2)) }}
+                            </span>
+                            <span class="truncate">{{ $userName }}</span>
+                        </div>
+                        <div>{{ number_format((int) ($zanaSummary['assigned_inbox_count'] ?? 0)) }}</div>
+                        <div>0</div>
+                        <div>0%</div>
+                    </div>
+                </div>
+                <div class="mt-4 text-[11px] text-ink-500">{{ __('Team performance fills in once assigned conversations are active in this workspace.') }}</div>
+            </section>
+        </div>
+    </section>
+
+    <details class="max-w-none mx-auto px-4 sm:px-6 lg:px-7 pb-8 group">
+        <summary class="list-none cursor-pointer rounded-[26px] border border-paper-200 bg-paper-0 px-5 py-4 shadow-card">
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-500">{{ __('Advanced operational widgets') }}</div>
+                    <div class="mt-1 text-[13px] text-ink-600">{{ __('Expand to view the full legacy WaDesk operator dashboard without removing any existing tools.') }}</div>
+                </div>
+                <span class="inline-flex items-center gap-2 rounded-full border border-paper-200 bg-paper-50 px-3 py-2 text-[12px] font-semibold text-ink-700">
+                    {{ __('Expand') }}
+                    <svg viewBox="0 0 16 16" class="w-3.5 h-3.5 transition group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M4 6l4 4 4-4" />
+                    </svg>
+                </span>
+            </div>
+        </summary>
+
+        <div class="pt-4">
     <!-- ========== PAGE HEADER ========== -->
     <section class="max-w-none mx-auto px-4 sm:px-6 lg:px-7 pt-5 md:pt-7 pb-4">
         <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
@@ -262,87 +600,6 @@
             </div>
         </div>
     </section>
-
-    {{-- ===== Quick access — user-pinned shortcut tiles (5×2), editable ===== --}}
-    @php
-        $quickTiles = \App\Support\QuickAccess::forUser(auth()->user());
-        $quickCatalog = \App\Support\QuickAccess::catalog();
-        $quickSelectedKeys = collect($quickTiles)->pluck('key')->filter()->values()->all();
-        $quickCustom = collect($quickTiles)->where('custom', true)->values();
-    @endphp
-    @php
-        // One-line "what it does" copy for the hover card, keyed by tile label.
-        $quickDesc = [
-            'Team Inbox' => __('Shared live inbox for your whole team'),
-            'Contacts' => __('Your audience list & lightweight CRM'),
-            'Campaigns' => __('Send bulk campaigns to many contacts'),
-            'Broadcasts' => __('Fire a one-off broadcast blast'),
-            'Templates' => __('Manage approved message templates'),
-            'Flows' => __('Build automated conversation flows'),
-            'Scheduled' => __('Messages queued to send later'),
-            'Catalog' => __('Your product catalog'),
-            'Store' => __('Your WhatsApp storefront'),
-            'Sales Pipeline' => __('Track deals from lead to close'),
-            'Analytics' => __('Reports, charts & insights'),
-            'Auto-reply' => __('Keyword-triggered auto responses'),
-            'Devices' => __('Your connected WhatsApp numbers'),
-            'Chat Widgets' => __('Website click-to-chat widget'),
-            'AI Assistants' => __('AI agents that reply for you'),
-            'Appointments' => __('Bookings & calendar'),
-            'Webhooks' => __('Send events to your own systems'),
-            'Meta Ads' => __('Click-to-WhatsApp ad campaigns'),
-            'WA Links' => __('Shareable click-to-chat links'),
-            'AI Training' => __('Teach the AI from your content'),
-        ];
-    @endphp
-    <section class="max-w-none mx-auto px-4 sm:px-6 lg:px-7 pb-3" data-tour="quick-access">
-        <div class="rounded-2xl border border-paper-200 bg-paper-0 p-4 sm:p-5 relative">
-            {{-- decorative wash clipped to its OWN layer so it never hides the
-                 hover tooltips (the card itself must NOT be overflow-hidden or the
-                 popovers get cut off — that was the bug). --}}
-            <div class="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
-                <div class="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-wa-bubble/60 blur-2xl"></div>
-            </div>
-            <div class="relative flex items-start justify-between gap-3 mb-4">
-                <div>
-                    <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-500">{{ __('Shortcuts') }}</div>
-                    <h2 class="font-serif text-[20px] leading-tight mt-0.5">{{ __('Quick') }} <span class="italic text-wa-deep">{{ __('access') }}</span></h2>
-                    <p class="text-[11.5px] text-ink-500 mt-0.5">{{ __('Your most-used tools — hover to see what each does.') }}</p>
-                </div>
-                <button type="button" data-qa-open
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-paper-200 bg-paper-0 hover:border-wa-deep hover:text-wa-deep text-[11px] font-semibold transition shrink-0">
-                    <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3z" /></svg>{{ __('Edit') }}
-                </button>
-            </div>
-            {{-- Compact grid: all 10 shortcuts fit in ONE row on desktop. --}}
-            <div class="relative grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-2" data-qa-grid>
-                @foreach ($quickTiles as $t)
-                    @php $__d = $quickDesc[$t['label']] ?? __('Open :x', ['x' => __($t['label'])]); @endphp
-                    <a href="{{ $t['url'] }}"
-                        class="qa-tile group relative flex flex-col items-center gap-1.5 rounded-xl border border-paper-200 bg-paper-0 px-1.5 py-2.5 text-center hover:border-wa-deep hover:shadow-card hover:-translate-y-0.5 transition">
-                        <span class="w-9 h-9 rounded-xl bg-wa-bubble ring-1 ring-wa-green/15 flex items-center justify-center text-wa-deep group-hover:bg-wa-deep group-hover:text-paper-0 group-hover:ring-wa-deep transition">
-                            <svg viewBox="0 0 16 16" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">{!! $t['icon'] !!}</svg>
-                        </span>
-                        <span class="text-[10px] font-semibold text-ink-700 leading-tight line-clamp-2">{{ __($t['label']) }}</span>
-
-                        {{-- hover tooltip — opens ABOVE the tile, centered. Uniform for
-                             every tile + never clips now that the card isn't overflow-hidden. --}}
-                        <span class="qa-pop pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-40 w-44 text-center rounded-xl border border-paper-200 bg-paper-0 shadow-card p-2.5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition duration-150">
-                            <span class="block text-[12px] font-semibold text-ink-900">{{ __($t['label']) }}</span>
-                            <span class="block text-[11px] text-ink-500 leading-snug mt-0.5">{{ $__d }}</span>
-                        </span>
-                    </a>
-                @endforeach
-                @if (empty($quickTiles))
-                    <button type="button" data-qa-open class="col-span-full py-6 text-[12px] text-ink-500 border border-dashed border-paper-300 rounded-2xl hover:border-wa-deep">{{ __('Add quick-access shortcuts →') }}</button>
-                @endif
-            </div>
-        </div>
-    </section>
-
-    {{-- The Quick-access editor modal is now global (x-user.quick-access-modal
-         in the layout), opened by any [data-qa-open] trigger — including the
-         pencil above and the edge-drawer pencil. --}}
 
     {{-- ===== Sales Pipeline KPIs — only when the plan has the feature ===== --}}
     @if (!empty($dealStats))
@@ -1136,5 +1393,8 @@ $valColor = $isFirst ? 'text-paper-0/60' : 'text-ink-500';
 
         </div>
     </section>
+
+        </div>
+    </details>
 
 </x-layouts.user>

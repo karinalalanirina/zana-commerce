@@ -1479,6 +1479,7 @@ class AdminPagesController extends Controller
 
     public function settingGeneral(): View
     {
+        $platformCurrency = \App\Support\ZanaPlatformBillingCurrency::code();
         $settings = [
             'app_name'        => (string) \App\Models\SystemSetting::get('app_name',        config('app.name', 'WaDesk')),
             'app_url'         => (string) \App\Models\SystemSetting::get('app_url',         config('app.url', '')),
@@ -1487,7 +1488,7 @@ class AdminPagesController extends Controller
             'from_email'      => (string) \App\Models\SystemSetting::get('from_email',      ''),
             'default_timezone'=> (string) \App\Models\SystemSetting::get('default_timezone',config('app.timezone', 'Asia/Kolkata')),
             'default_language'=> (string) \App\Models\SystemSetting::get('default_language',config('app.locale', 'en')),
-            'default_currency'=> (string) \App\Models\SystemSetting::get('default_currency','USD'),
+            'default_currency'=> $platformCurrency,
             // Platform-wide default country for every phone-input picker.
             // Read by app_default_country() → meta tags → intl-tel-input JS,
             // so flipping this once switches every blade + JS picker default.
@@ -1572,6 +1573,21 @@ class AdminPagesController extends Controller
             'platform_branding_footer' => 'nullable|string|max:60',
         ];
         $data = $request->validate($rules);
+
+        if (array_key_exists('default_currency', $data)) {
+            $normalizedCurrency = strtoupper(trim((string) ($data['default_currency'] ?? '')));
+            if ($normalizedCurrency === '') {
+                $normalizedCurrency = \App\Support\ZanaPlatformBillingCurrency::code();
+            }
+
+            if (!\App\Models\Currency::query()->where('code', $normalizedCurrency)->exists()) {
+                return back()
+                    ->withErrors(['default_currency' => __('The selected billing currency is invalid.')])
+                    ->withInput();
+            }
+
+            $data['default_currency'] = $normalizedCurrency;
+        }
 
         // Persist scalar fields first (excluding files).
         $scalar = \Illuminate\Support\Arr::except($data, ['favicon', 'logos']);

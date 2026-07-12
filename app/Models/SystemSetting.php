@@ -21,6 +21,10 @@ class SystemSetting extends Model
     protected $fillable = ['key', 'type', 'value', 'description'];
 
     public const CACHE_PREFIX = 'system_setting:';
+    public const FORCED_STRING_KEYS = [
+        'default_currency',
+        'catalog_default_currency',
+    ];
 
     /**
      * Keys whose values are secrets — transparently encrypted at rest
@@ -53,6 +57,11 @@ class SystemSetting extends Model
         return in_array($key, self::ENCRYPTED_KEYS, true);
     }
 
+    private static function isForcedStringKey(string $key): bool
+    {
+        return in_array($key, self::FORCED_STRING_KEYS, true);
+    }
+
     protected static function booted(): void
     {
         static::saved(function (self $row) {
@@ -80,7 +89,8 @@ class SystemSetting extends Model
         // cache lookup queries the DB and would hard-crash the request, so
         // we fall back to the caller's default when the store is unreachable.
         try {
-            return Cache::remember(self::CACHE_PREFIX . $key, 1800, function () use ($key, $default) {
+            $cacheKey = self::CACHE_PREFIX . $key;
+            $value = Cache::remember($cacheKey, 1800, function () use ($key, $default) {
                 $row = self::where('key', $key)->first();
                 if (!$row) return $default;
                 $raw = $row->value;
@@ -92,8 +102,38 @@ class SystemSetting extends Model
                     try { $raw = Crypt::decrypt($raw); }
                     catch (\Throwable $e) { /* plain legacy value */ }
                 }
+                if (self::isForcedStringKey($key)) {
+                    $normalized = self::normalizeForcedStringValue($raw, $default);
+                    if ($normalized !== $default && $row->type !== 'string') {
+                        self::withoutEvents(function () use ($row, $normalized) {
+                            $row->forceFill(['type' => 'string', 'value' => $normalized])->save();
+                        });
+                    }
+                    return $normalized;
+                }
                 return self::cast($raw, $row->type);
             });
+
+            if (self::isForcedStringKey($key)) {
+                if (is_string($value) && trim($value) !== '') {
+                    return self::normalizeForcedStringValue($value, $default);
+                }
+
+                Cache::forget($cacheKey);
+                $row = self::query()->where('key', $key)->first();
+                if (!$row) {
+                    return $default;
+                }
+
+                $normalized = self::normalizeForcedStringValue($row->value, $default);
+                if ($normalized !== $default && $row->type !== 'string') {
+                    $row->forceFill(['type' => 'string', 'value' => $normalized])->save();
+                }
+
+                return $normalized;
+            }
+
+            return $value;
         } catch (\Throwable $e) {
             return $default;
         }
@@ -101,6 +141,10 @@ class SystemSetting extends Model
 
     public static function set(string $key, mixed $value, string $type = 'int', ?string $description = null): self
     {
+        if (self::isForcedStringKey($key)) {
+            $type = 'string';
+            $value = self::normalizeForcedStringValue($value, null);
+        }
         $row = self::firstOrNew(['key' => $key]);
         $row->type = $type;
         $stored = self::stringify($value, $type);
@@ -114,6 +158,13 @@ class SystemSetting extends Model
         if ($description !== null) $row->description = $description;
         $row->save();
         return $row;
+    }
+
+    private static function normalizeForcedStringValue(mixed $raw, mixed $default = null): mixed
+    {
+        $value = strtoupper(trim((string) ($raw ?? '')));
+
+        return $value !== '' ? $value : $default;
     }
 
     private static function cast(?string $raw, string $type): mixed

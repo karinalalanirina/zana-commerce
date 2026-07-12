@@ -8,6 +8,20 @@
             ? \App\Models\WaStorefront::where('workspace_id', $u->current_workspace_id)->first()
             : null;
         $items = $order->items_json ?? [];
+        $hideIndiaMerchantPayments = \App\Support\ZanaAfricaPayments::hidesIndiaMerchantPayments();
+        $orderMeta = is_array($order->meta_json) ? $order->meta_json : [];
+        $zanaPaymentStep = (string) ($orderMeta['zana_payment_step'] ?? '');
+        $paymentInstructions = \App\Support\ZanaAfricaPayments::instructionsText($sf, $order);
+        $storedExternalPaymentLink = \App\Support\ZanaAfricaPayments::externalPaymentLink($sf, $order);
+        $paymentStepLabel = match ($zanaPaymentStep) {
+            'awaiting_payment' => __('Awaiting Payment'),
+            'payment_link_sent' => __('Payment Link Sent'),
+            'payment_reminder_sent' => __('Payment Reminder Sent'),
+            'customer_says_paid' => __('Customer Says Paid'),
+            'paid_confirmed' => __('Paid Confirmed'),
+            'payment_failed' => __('Payment Failed'),
+            default => null,
+        };
     @endphp
     <main class="max-w-none mx-auto px-4 sm:px-6 lg:px-7 py-7">
         <div class="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
@@ -87,7 +101,11 @@
                         <form method="POST" action="{{ route('user.store.orders.update', $order->id) }}"
                             class="bg-paper-0 border border-paper-200 rounded-2xl p-5 shadow-card space-y-3">
                             @csrf @method('PUT')
+                            <input type="hidden" name="payment_action" id="payment-action-input" value="">
                             <h3 class="font-serif text-[18px]">{{ __('Update status') }}</h3>
+                            @if ($paymentStepLabel)
+                                <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-wa-green/30 bg-wa-mint/40 text-[11px] font-semibold text-wa-deep">{{ $paymentStepLabel }}</div>
+                            @endif
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <label class="block">
                                     <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Status') }}</span>
@@ -103,21 +121,48 @@
                                     <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Payment link') }}
                                         <span class="text-ink-500 font-normal">(optional)</span></span>
                                     <input type="url" name="payment_link" maxlength="1024"
-                                        value="{{ $order->payment_link }}" placeholder="https://rzp.io/..."
+                                        value="{{ $order->payment_link ?: $storedExternalPaymentLink }}" placeholder="https://paystack.com/pay/..."
                                         class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] font-mono focus:outline-none focus:border-wa-deep" />
                                 </label>
                             </div>
+                            <label class="block">
+                                <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Payment workflow') }}</span>
+                                <div class="mt-1 rounded-xl border border-paper-200 bg-paper-50 px-3 py-3 text-[12px] text-ink-600">
+                                    {{ __('Visible launch labels map to the current backend safely: Awaiting Payment → pending, Customer Says Paid → confirmed, Paid Confirmed → paid, Payment Failed → cancelled.') }}
+                                </div>
+                            </label>
+                            @if ($paymentInstructions)
+                                <label class="block">
+                                    <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Current payment instructions') }}</span>
+                                    <textarea rows="5" readonly
+                                        class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[12.5px] bg-paper-50 text-ink-700 focus:outline-none">{{ $paymentInstructions }}</textarea>
+                                </label>
+                            @endif
                             <label class="block">
                                 <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Notes') }}</span>
                                 <textarea name="notes" rows="2" maxlength="1000"
                                     class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] focus:outline-none focus:border-wa-deep">{{ $order->notes }}</textarea>
                             </label>
                             <div class="flex justify-end gap-2 pt-2 border-t border-paper-200 flex-wrap">
+                                <button type="button" onclick="submitPaymentAction('send_instructions')"
+                                    class="px-3 py-1.5 border border-wa-deep/40 text-wa-deep rounded-full text-[12px] hover:bg-wa-mint/40 font-semibold">{{ __('Send payment instructions') }}</button>
+                                <button type="button" onclick="submitPaymentAction('send_reminder')"
+                                    class="px-3 py-1.5 border border-paper-200 rounded-full text-[12px] hover:bg-paper-50">{{ __('Send payment reminder') }}</button>
+                                @if ($storedExternalPaymentLink || $order->payment_link)
+                                    <button type="button" onclick="sendPaymentLink()"
+                                        class="px-3 py-1.5 border border-paper-200 rounded-full text-[12px] hover:bg-paper-50">{{ __('Send payment link') }}</button>
+                                    <button type="button" onclick="submitPaymentAction('resend_link')"
+                                        class="px-3 py-1.5 border border-paper-200 rounded-full text-[12px] hover:bg-paper-50">{{ __('Resend payment link') }}</button>
+                                @endif
+                                <button type="button" onclick="submitPaymentAction('customer_says_paid')"
+                                    class="px-3 py-1.5 border border-paper-200 rounded-full text-[12px] hover:bg-paper-50">{{ __('Mark customer says paid') }}</button>
+                                <button type="button" onclick="submitPaymentAction('paid_confirmed')"
+                                    class="px-3 py-1.5 border border-paper-200 rounded-full text-[12px] hover:bg-paper-50">{{ __('Mark paid confirmed') }}</button>
+                                <button type="button" onclick="submitPaymentAction('payment_failed')"
+                                    class="px-3 py-1.5 border border-paper-200 rounded-full text-[12px] hover:bg-paper-50">{{ __('Mark payment failed') }}</button>
+                                @if (!$hideIndiaMerchantPayments)
                                 <button type="button" onclick="generatePaymentLink()"
                                     class="px-3 py-1.5 border border-wa-deep/40 text-wa-deep rounded-full text-[12px] hover:bg-wa-mint/40 font-semibold">{{ __('Generate Razorpay link + send') }}</button>
-                                @if ($order->payment_link)
-                                    <button type="button" onclick="sendPaymentLink()"
-                                        class="px-3 py-1.5 border border-paper-200 rounded-full text-[12px] hover:bg-paper-50">{{ __('Send payment link via WhatsApp') }}</button>
                                 @endif
                                 <button type="submit"
                                     class="px-4 py-2 rounded-full bg-wa-deep hover:bg-wa-teal text-paper-0 text-[12px] font-semibold">{{ __('Save') }}</button>
@@ -128,6 +173,7 @@
                     <!-- Customer + meta -->
                     <aside class="space-y-3">
                         {{-- WhatsApp Pay — native in-chat charge (India) --}}
+                        @unless ($hideIndiaMerchantPayments)
                         @php
                             $wps = $order->wa_payment_status;
                             $wpsCls = match ($wps) {
@@ -156,6 +202,15 @@
                                 {{ $wps === 'captured' ? __('Re-send order details') : __('Request payment on WhatsApp') }}</button>
                             <a href="{{ route('user.store.payments.index') }}" class="block mt-2 text-center text-[11px] text-wa-deep hover:underline">{{ __('Configure WhatsApp Pay →') }}</a>
                         </form>
+                        @endunless
+
+                        <div class="bg-paper-0 border border-paper-200 rounded-2xl p-4 shadow-card">
+                            <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-500">{{ __('Africa payment flow') }}</div>
+                            <div class="mt-1 text-[12px] text-ink-600 leading-relaxed">
+                                {{ __('Use manual payment instructions, pasted payment links, and manual confirmation as the launch flow. Native automated rails can be added later without changing the storefront/order foundation.') }}
+                            </div>
+                            <a href="{{ route('user.store.storefront.edit') }}" class="mt-3 inline-flex text-[11px] font-semibold text-wa-deep hover:underline">{{ __('Edit storefront payment setup →') }}</a>
+                        </div>
 
                         <div class="bg-paper-0 border border-paper-200 rounded-2xl p-4 shadow-card">
                             <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-500">
@@ -260,6 +315,14 @@
     </main>
 
     <script>
+        function submitPaymentAction(action) {
+            const input = document.getElementById('payment-action-input');
+            if (input) {
+                input.value = action;
+            }
+            input?.form?.submit();
+        }
+
         async function sendPaymentLink() {
             const link = document.querySelector('[name=payment_link]').value;
             if (!link) return alert('Save the payment link first.');

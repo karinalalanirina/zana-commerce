@@ -2,6 +2,12 @@
     $p = $product ?? null;
     $tagsCsv = $p && is_array($p->tags_json) ? implode(', ', $p->tags_json) : '';
     $galleryUrls = $p && is_array($p->gallery_json) ? $p->gallery_json : [];
+    $workspace = auth()->user()?->currentWorkspace;
+    $storefront = $workspace ? \App\Models\WaStorefront::where('workspace_id', $workspace->id)->first() : null;
+    $defaultProductCurrency = old(
+        'currency_code',
+        $p?->currency_code ?? \App\Support\ZanaStorefrontCurrency::code($storefront, $workspace)
+    );
 @endphp
 <form method="POST" action="{{ $p ? route('user.store.products.update', $p->id) : route('user.store.products.store') }}"
     enctype="multipart/form-data" data-product-form class="space-y-5">
@@ -229,7 +235,7 @@
         'BDT' => '৳ BDT · Bangladeshi Taka',
         'LKR' => 'Rs LKR · Sri Lankan Rupee',
     ] as $c => $l)
-                                <option value="{{ $c }}" @selected(old('currency_code', $p?->currency_code ?? 'INR') === $c)>{{ $l }}
+                                <option value="{{ $c }}" @selected($defaultProductCurrency === $c)>{{ $l }}
                                 </option>
                             @endforeach
                         </select>
@@ -355,7 +361,7 @@
                             {{ $p?->name ?: 'Product name' }}</div>
                         <div class="flex items-baseline gap-2 mt-1">
                             <span data-preview-price
-                                class="font-semibold text-[14px] text-ink-900">{{ $p?->price_display ?? \App\Support\FormatSettings::formatIn(0, $p?->currency_code ?? \App\Models\SystemSetting::get('default_currency', 'USD')) }}</span>
+                                class="font-semibold text-[14px] text-ink-900">{{ $p?->price_display ?? \App\Support\ZanaStorefrontCurrency::formatMinor(0, $defaultProductCurrency) }}</span>
                             <span data-preview-compare
                                 class="text-[11.5px] text-ink-500 line-through {{ $p && $p->on_sale ? '' : 'hidden' }}">{{ $p?->compare_price_display }}</span>
                         </div>

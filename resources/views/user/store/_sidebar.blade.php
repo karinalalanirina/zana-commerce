@@ -1,4 +1,5 @@
 @php
+    $hideIndiaMerchantPayments = (bool) config('zana.hide_india_merchant_payments', true);
     $tabs = [
         'overview' => ['Overview', 'M2 11l3-5 3 3 3-6 3 4', null],
         'orders' => [
@@ -124,6 +125,7 @@ if ($cfgConnected) {
         <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-500 px-3 pt-2 pb-1.5">
             {{ __('Store') }}</div>
         @foreach ($tabs as $key => [$label, $iconPath, $count])
+            @continue($hideIndiaMerchantPayments && $key === 'payments')
             @php
                 $href = match ($key) {
                     'overview' => route('user.store.index'),

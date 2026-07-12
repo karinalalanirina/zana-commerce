@@ -9,8 +9,10 @@
     $surface = $surface ?? ($theme['surface'] ?? '#FFFFFF');
     $border = $border ?? ($theme['border'] ?? '#E5DFD0');
     $shopName = $shopName ?? ($workspace?->name ?: 'Store');
-    $onSale = $product->compare_price_minor && $product->compare_price_minor > $product->price_minor;
-    $savings = $onSale ? $product->compare_price_minor - $product->price_minor : 0;
+    $storefrontPriceMinor = $product->storefrontPriceMinor($sf);
+    $storefrontCompareMinor = $product->storefrontComparePriceMinor($sf);
+    $onSale = $storefrontCompareMinor && $storefrontCompareMinor > $storefrontPriceMinor;
+    $savings = $onSale ? $storefrontCompareMinor - $storefrontPriceMinor : 0;
     $images = collect([$product->image_url])
         ->concat(is_array($product->gallery_json) ? $product->gallery_json : [])
         ->filter()
@@ -61,11 +63,11 @@
         <h1>{{ $product->name }}</h1>
 
         <div class="sf-pd-price">
-            <span class="sf-pd-now">{{ $product->price_display }}</span>
+            <span class="sf-pd-now">{{ $product->storefrontPriceDisplay($sf) }}</span>
             @if ($onSale)
-                <span class="sf-pd-was">{{ $product->compare_price_display }}</span>
+                <span class="sf-pd-was">{{ $product->storefrontComparePriceDisplay($sf) }}</span>
                 <span class="sf-pd-save">Save
-                    {{ (int) round(($savings / $product->compare_price_minor) * 100) }}%</span>
+                    {{ (int) round(($savings / $storefrontCompareMinor) * 100) }}%</span>
             @endif
         </div>
 
@@ -182,7 +184,7 @@
     <div class="sf-tabs-pane" data-pane="ship">
         @php
             $shipFreeMinor = (int) ($sf->shipping_json['free_threshold'] ?? 99900);
-            $shipFreeText = \App\Support\FormatSettings::formatIn($shipFreeMinor / 100, $sf->currency_code ?? 'USD');
+            $shipFreeText = \App\Support\ZanaStorefrontCurrency::formatStorefrontMinor($shipFreeMinor, $sf);
         @endphp
         <p><strong>{{ __('Shipping.') }}</strong> Orders are dispatched within 1–2 business days. Delivery times depend
             on your location — typically 2–5 business days. Free shipping on orders above {{ $shipFreeText }}.</p>

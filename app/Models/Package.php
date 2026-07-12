@@ -214,6 +214,19 @@ class Package extends Model
         return $this->currency_symbol . number_format($value, 0);
     }
 
+    public function getPriceDisplayAttribute(): string
+    {
+        if ($this->is_custom_quote) {
+            return __('Custom');
+        }
+
+        if ($this->isFreePlan()) {
+            return __('Free');
+        }
+
+        return \App\Support\ZanaPlatformBillingCurrency::formatPackageAmount($this);
+    }
+
     /** Human period label from plan_unit/plan_duration, e.g. "/month", "/year". */
     public function periodLabel(): string
     {

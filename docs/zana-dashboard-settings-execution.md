@@ -43,6 +43,7 @@ This file captures what can already be handled through dashboard/admin/settings 
 - Any stricter server-side official-only fallback guard if dashboard restrictions are later bypassed
 - Kenya-specific M-Pesa workflows
 - Delivery zones and weekly merchant reporting
+- Currency-context separation where vendor code reused the wrong source of truth
 
 ## What Should Not Be Changed Yet
 
@@ -50,3 +51,9 @@ This file captures what can already be handled through dashboard/admin/settings 
 - Broad frontend redesign
 - Vendor module deletion
 - Bulk feature removal that would complicate future upstream updates
+
+## Currency Source Of Truth
+
+- Platform billing currency: `system_settings.default_currency`. This applies to Zana packages, subscription checkout, plan comparison, and feature-upgrade prompts.
+- Merchant storefront currency: storefront `currency_code`, then workspace `currency`, then `catalog_default_currency`, then platform default as a last fallback.
+- These two currencies should stay separate. Merchant storefront prices must not inherit the platform billing currency, and subscription prices must not inherit the merchant storefront currency.

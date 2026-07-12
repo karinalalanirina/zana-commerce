@@ -202,6 +202,74 @@ $navItems = array_values(
             usort($navItems, fn ($a, $b) => ($navPos[$a['key']] ?? PHP_INT_MAX) <=> ($navPos[$b['key']] ?? PHP_INT_MAX));
         }
     }
+
+    $zanaMerchantNavV2 = (bool) config('zana.merchant_nav_v2', true);
+    $workspace = auth()->user()?->currentWorkspace;
+    $hasFeature = fn (string $feature): bool => !$workspace || \App\Services\PlanLimitGuard::hasFeature($workspace, $feature);
+
+    $zanaActiveTab = match (true) {
+        request()->is('dashboard') => 'dashboard',
+        request()->is('team-inbox') || request()->is('team-inbox/*') || request()->is('message-history') || request()->is('message-history/*') => 'inbox',
+        request()->is('store/orders') || request()->is('store/orders/*') => 'orders',
+        request()->is('ai-training') || request()->is('ai-training/*') => 'ai-assistant',
+        request()->is('wa-campaigns') || request()->is('wa-campaigns/*') || request()->is('broadcasts') || request()->is('broadcasts/*') => 'campaigns',
+        request()->is('catalog') || request()->is('catalog/*') || request()->is('store/products') || request()->is('store/products/*') => 'catalog',
+        request()->is('store/storefront') || request()->is('store/storefront/*') || request()->is('store') => 'storefront',
+        request()->is('analytics') || request()->is('analytics/*') => 'reports',
+        default => 'more',
+    };
+
+    $zanaTabs = [
+        ['key' => 'dashboard', 'label' => __('Dashboard'), 'href' => url('/dashboard'), 'icon' => '<rect x="2.5" y="2.5" width="4.5" height="5" rx="1"/><rect x="9" y="2.5" width="4.5" height="3" rx="1"/><rect x="9" y="7.5" width="4.5" height="6" rx="1"/><rect x="2.5" y="9.5" width="4.5" height="4" rx="1"/>', 'icon_bg' => 'bg-[#E6F4EF] text-wa-deep', 'visible' => $userRank >= 2],
+        ['key' => 'inbox', 'label' => __('Inbox'), 'href' => url('/team-inbox'), 'icon' => '<rect x="2.5" y="3" width="11" height="8.5" rx="1.5"/><path d="M2.5 6h11M5 8.8h2.6"/>', 'icon_bg' => 'bg-[#E7F0FF] text-[#2553A6]', 'visible' => $userRank >= 1],
+        ['key' => 'orders', 'label' => __('Orders'), 'href' => url('/store/orders'), 'icon' => '<path d="M3 4h10l-1 7H4L3 4Z"/><path d="M6 4V3h4v1"/><circle cx="6" cy="13" r="1"/><circle cx="11" cy="13" r="1"/>', 'icon_bg' => 'bg-[#FFF0DE] text-[#8A5716]', 'visible' => $userRank >= 3],
+        ['key' => 'ai-assistant', 'label' => __('AI Assistant'), 'href' => url('/ai-training'), 'icon' => '<rect x="3" y="4" width="10" height="7.5" rx="2"/><circle cx="6.2" cy="7.8" r="0.85"/><circle cx="9.8" cy="7.8" r="0.85"/><path d="M8 2v2M6 11.5h4"/>', 'icon_bg' => 'bg-[#F3EDFF] text-[#6E3BD2]', 'visible' => $userRank >= 3],
+        ['key' => 'campaigns', 'label' => __('Campaigns'), 'href' => url('/wa-campaigns'), 'icon' => '<path d="M3 4.5A2.5 2.5 0 0 1 5.5 2h5A2.5 2.5 0 0 1 13 4.5v4A2.5 2.5 0 0 1 10.5 11H8l-3.5 2v-2A2.5 2.5 0 0 1 2 8.5v-4Z"/><path d="M5.5 6.5h5M5.5 8.5h3"/>', 'icon_bg' => 'bg-[#FFE9E2] text-[#B64A2A]', 'visible' => $userRank >= 3],
+        ['key' => 'catalog', 'label' => __('Catalog'), 'href' => url('/store/products'), 'icon' => '<rect x="3" y="2.5" width="10" height="11" rx="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3.5"/>', 'icon_bg' => 'bg-[#EEF7FF] text-[#2563A8]', 'visible' => $userRank >= 3],
+        ['key' => 'storefront', 'label' => __('Storefront'), 'href' => url('/store/storefront'), 'icon' => '<path d="M2.5 6.2 4 3h8l1.5 3.2v1.1a1.6 1.6 0 0 1-1.6 1.6H4.1a1.6 1.6 0 0 1-1.6-1.6V6.2Z"/><path d="M4.5 8.8V13h7V8.8"/>', 'icon_bg' => 'bg-[#FFF4E8] text-[#9A5B18]', 'visible' => $userRank >= 3],
+        ['key' => 'reports', 'label' => __('Reports'), 'href' => url('/analytics'), 'icon' => '<path d="M2.5 13.5v-10M2.5 13.5h11"/><path d="M5.2 11V8M8 11V5M10.8 11V7.2"/>', 'icon_bg' => 'bg-[#EEF2FF] text-[#4B57C5]', 'visible' => $userRank >= 2],
+        ['key' => 'more', 'label' => __('More'), 'href' => url('/more'), 'icon' => '<circle cx="4" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="12" cy="8" r="1"/>', 'visible' => true],
+    ];
+    $zanaTabs = array_values(array_filter($zanaTabs, fn ($tab) => $tab['visible']));
+
+    $zanaMoreSections = [
+        [
+            'label' => __('Growth tools'),
+            'items' => [
+                ['label' => __('Meta Ads'), 'href' => url('/meta-ads'), 'visible' => $userRank >= 3],
+                ['label' => __('Flows'), 'href' => url('/flows'), 'visible' => $userRank >= 3],
+                ['label' => __('Templates'), 'href' => url('/templates'), 'visible' => $userRank >= 2],
+            ],
+        ],
+        [
+            'label' => __('Setup'),
+            'items' => [
+                ['label' => __('Devices / WABA Accounts'), 'href' => url('/devices'), 'visible' => $userRank >= 3],
+                ['label' => __('Integrations'), 'href' => url('/integrations'), 'visible' => $userRank >= 3],
+                ['label' => __('Team'), 'href' => url('/team-inbox/members'), 'visible' => $userRank >= 3],
+                ['label' => __('Settings'), 'href' => url('/settings'), 'visible' => $userRank >= 2],
+                ['label' => __('Webhooks'), 'href' => url('/webhooks'), 'visible' => $userRank >= 3],
+            ],
+        ],
+        [
+            'label' => __('Support'),
+            'items' => [
+                ['label' => __('Guidebook'), 'href' => url('/guidebook'), 'visible' => true],
+                ['label' => __('Support'), 'href' => url('/support'), 'visible' => true],
+                ['label' => __('Activity Log'), 'href' => url('/activity-log'), 'visible' => $userRank >= 3],
+            ],
+        ],
+        [
+            'label' => __('Also available'),
+            'items' => [
+                ['label' => __('AI Calls'), 'href' => url('/ai-assistants'), 'visible' => $userRank >= 3 && $hasFeature('access_ai_agents')],
+                ['label' => __('Contacts'), 'href' => url('/contacts'), 'visible' => $userRank >= 2],
+                ['label' => __('Message History'), 'href' => url('/message-history'), 'visible' => $userRank >= 2],
+                ['label' => __('Quick Send'), 'href' => url('/chat'), 'visible' => $userRank >= 2],
+                ['label' => __('Developers / API'), 'href' => url('/developers'), 'visible' => $userRank >= 2],
+            ],
+        ],
+    ];
 @endphp
 
 <header class="relative z-40 bg-paper-0 hairline-b border-b border-paper-200">
@@ -323,30 +391,34 @@ $logoName = $wsLogo ? ($__bw->name ?: $brandName) : $brandName;
             </div>
         @endif
 
-        <nav class="flex-1 min-w-0 hidden lg:flex items-center justify-center overflow-hidden" data-tour="navbar">
-            <div class="flex items-center gap-0.5 2xl:gap-1">
-                @foreach ($navItems as $item)
-                    @php $isActive = $item['key'] === $active; @endphp
-                    <div class="relative inline-flex shrink-0">
-                        <a href="{{ $item['href'] }}" title="{{ $item['label'] }}" data-tour="nav-{{ $item['key'] }}" @class([
-                            'inline-flex items-center gap-[6px] 2xl:gap-2 px-2.5 2xl:px-3.5 py-[7px] rounded-full text-[12.5px] 2xl:text-[13px] font-medium transition whitespace-nowrap',
-                            'bg-wa-deep text-paper-0' => $isActive,
-                            'text-ink-600 hover:bg-paper-50' => !$isActive,
-                        ])>
-                            <svg viewBox="0 0 16 16" class="w-3.5 h-3.5 2xl:w-4 2xl:h-4 shrink-0" fill="none"
-                                stroke="currentColor" stroke-width="{{ $item['sw'] }}">{!! $item['icon'] !!}</svg>
-                            <span>{{ $item['label'] }}</span>
-                        </a>
-                        @if (!empty($item['feature']))
-                            <span class="absolute -top-1 right-2 z-10 leading-none [&_.plan-crown]:ml-0"><x-plan-crown
-                                    :feature="$item['feature']" size="sm" /></span>
-                        @endif
-                    </div>
-                @endforeach
-            </div>
-        </nav>
+        @if (!$zanaMerchantNavV2)
+            <nav class="flex-1 min-w-0 hidden lg:flex items-center justify-center overflow-hidden" data-tour="navbar">
+                <div class="flex items-center gap-0.5 2xl:gap-1">
+                    @foreach ($navItems as $item)
+                        @php $isActive = $item['key'] === $active; @endphp
+                        <div class="relative inline-flex shrink-0">
+                            <a href="{{ $item['href'] }}" title="{{ $item['label'] }}" data-tour="nav-{{ $item['key'] }}" @class([
+                                'inline-flex items-center gap-[6px] 2xl:gap-2 px-2.5 2xl:px-3.5 py-[7px] rounded-full text-[12.5px] 2xl:text-[13px] font-medium transition whitespace-nowrap',
+                                'bg-wa-deep text-paper-0' => $isActive,
+                                'text-ink-600 hover:bg-paper-50' => !$isActive,
+                            ])>
+                                <svg viewBox="0 0 16 16" class="w-3.5 h-3.5 2xl:w-4 2xl:h-4 shrink-0" fill="none"
+                                    stroke="currentColor" stroke-width="{{ $item['sw'] }}">{!! $item['icon'] !!}</svg>
+                                <span>{{ $item['label'] }}</span>
+                            </a>
+                            @if (!empty($item['feature']))
+                                <span class="absolute -top-1 right-2 z-10 leading-none [&_.plan-crown]:ml-0"><x-plan-crown
+                                        :feature="$item['feature']" size="sm" /></span>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            </nav>
+        @else
+            <div class="flex-1 min-w-0"></div>
+        @endif
 
-        <div class="flex-1 lg:hidden"></div>
+        <div class="{{ $zanaMerchantNavV2 ? 'hidden' : 'flex-1 lg:hidden' }}"></div>
 
         <div class="flex items-center gap-2 shrink-0">
             <div class="relative lg:hidden" data-mobile-nav>
@@ -541,6 +613,91 @@ $logoName = $wsLogo ? ($__bw->name ?: $brandName) : $brandName;
         </div>
     </div>
 </header>
+@if ($zanaMerchantNavV2)
+    <div class="relative z-30 border-b border-paper-200 bg-paper-50/80 backdrop-blur">
+        <div class="max-w-none mx-auto px-2 sm:px-4 lg:px-6 py-3">
+            <div class="flex items-center gap-5">
+                <div class="relative flex-1 min-w-0">
+                <div data-zana-nav-row
+                    class="overflow-x-auto overflow-y-visible scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <div class="inline-flex min-w-full items-center gap-8 lg:gap-10 xl:gap-12 pr-3">
+                    @foreach ($zanaTabs as $tab)
+                        @continue($tab['key'] === 'more')
+                        @php $isZanaActive = $zanaActiveTab === $tab['key']; @endphp
+                        <a href="{{ $tab['href'] }}" data-tour="nav-{{ $tab['key'] }}" @class([
+                            'group inline-flex shrink-0 items-center gap-2 text-[13px] font-medium transition whitespace-nowrap',
+                            'rounded-full bg-ink-900 px-4 py-2 font-semibold text-paper-0 shadow-soft' => $isZanaActive,
+                            'text-ink-700 hover:text-wa-deep' => !$isZanaActive,
+                        ])>
+                            <svg viewBox="0 0 16 16" class="w-4 h-4 shrink-0" fill="none" stroke="currentColor"
+                                stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round">{!! $tab['icon'] !!}</svg>
+                            <span>{{ $tab['label'] }}</span>
+                        </a>
+                    @endforeach
+                    </div>
+                </div>
+                </div>
+
+                @php $moreTab = collect($zanaTabs)->firstWhere('key', 'more'); @endphp
+                @if ($moreTab)
+                    <div class="relative shrink-0 ml-auto" data-zana-more-wrap>
+                        <button type="button" data-zana-more-toggle @class([
+                            'group inline-flex items-center gap-2 text-[13px] transition whitespace-nowrap',
+                            'font-semibold text-ink-900' => $zanaActiveTab === 'more',
+                            'font-medium text-ink-700 hover:text-wa-deep' => $zanaActiveTab !== 'more',
+                        ])>
+                            <span>{{ $moreTab['label'] }}</span>
+                            <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor"
+                                stroke-width="1.8">
+                                <path d="M5 6.5 8 9.5l3-3" />
+                            </svg>
+                        </button>
+
+                        <div data-zana-more-panel
+                            class="hidden absolute right-0 mt-2 w-80 max-w-[calc(100vw-1rem)] rounded-2xl border border-paper-200 bg-paper-0 p-3 shadow-soft z-[80]">
+                            <div class="mb-2 px-1">
+                                <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-500">
+                                    {{ __('Advanced tools') }}</div>
+                                <p class="mt-1 text-[12px] text-ink-500">
+                                    {{ __("Everything still works — it just lives behind a cleaner merchant menu.") }}
+                                </p>
+                            </div>
+
+                            <div class="space-y-3">
+                                @foreach ($zanaMoreSections as $section)
+                                    @php $sectionItems = array_values(array_filter($section['items'], fn ($item) => $item['visible'])); @endphp
+                                    @if (!empty($sectionItems))
+                                        <section class="rounded-2xl border border-paper-100 bg-paper-50/70 p-2.5">
+                                            <div class="px-1 pb-2 font-mono text-[10px] uppercase tracking-[0.15em] text-ink-500">
+                                                {{ $section['label'] }}</div>
+                                            <div class="space-y-1">
+                                                @foreach ($sectionItems as $item)
+                                                    <a href="{{ $item['href'] }}"
+                                                        class="flex items-center justify-between rounded-xl px-3 py-2 text-[13px] text-ink-700 hover:bg-paper-0 {{ request()->fullUrlIs($item['href']) ? 'bg-wa-mint text-wa-deep font-semibold' : '' }}">
+                                                        <span>{{ $item['label'] }}</span>
+                                                        <svg viewBox="0 0 16 16" class="h-3.5 w-3.5 opacity-70 shrink-0" fill="none"
+                                                            stroke="currentColor" stroke-width="1.8">
+                                                            <path d="M6 3.5 10.5 8 6 12.5" />
+                                                        </svg>
+                                                    </a>
+                                                @endforeach
+                                            </div>
+                                        </section>
+                                    @endif
+                                @endforeach
+                            </div>
+
+                            <a href="{{ url('/more') }}"
+                                class="mt-3 inline-flex px-1 text-[12px] font-semibold text-wa-deep hover:underline">
+                                {{ __('Open full More page') }}
+                            </a>
+                        </div>
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+@endif
 <script>
     (function() {
         const wsBtn = document.querySelector('[data-ws-toggle]');
@@ -564,11 +721,22 @@ $logoName = $wsLogo ? ($__bw->name ?: $brandName) : $brandName;
             mobileNavPane?.classList.toggle('hidden');
         });
 
+        const zanaMoreToggle = document.querySelector('[data-zana-more-toggle]');
+        const zanaMorePanel = document.querySelector('[data-zana-more-panel]');
+        zanaMoreToggle?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            zanaMorePanel?.classList.toggle('hidden');
+        });
+        zanaMorePanel?.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
         document.addEventListener('click', () => {
             wsMenu?.classList.add('hidden');
             userPane?.classList.add('hidden');
             mobileNavPane?.classList.add('hidden');
             notifPane?.classList.add('hidden');
+            zanaMorePanel?.classList.add('hidden');
         });
 
         // ----- Notification bell dropdown -----

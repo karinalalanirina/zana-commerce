@@ -53,7 +53,7 @@
             BDT: '৳',
             LKR: 'Rs',
         };
-        const SHOP_CURRENCY = (window.SF_SHOP && window.SF_SHOP.currency) || @json($sf->currency_code ?? 'INR');
+        const SHOP_CURRENCY = (window.SF_SHOP && window.SF_SHOP.currency) || @json(\App\Support\ZanaStorefrontCurrency::code($sf, $workspace ?? null));
         const SHIPPING = (window.SF_SHOP && window.SF_SHOP.shipping) || null;
         const PAYMENT = (window.SF_SHOP && window.SF_SHOP.payment) || {
             provider: null,

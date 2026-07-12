@@ -9,6 +9,7 @@ use App\Models\Subscription;
 use App\Models\SystemSetting;
 use App\Services\Payment\PaymentGatewayManager;
 use App\Services\Payment\SubscriptionService;
+use App\Support\ZanaPlatformBillingCurrency;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -62,9 +63,8 @@ class PricingController extends Controller
             ? Subscription::query()->where('workspace_id', $ws->id)->active()->latest('id')->first()
             : null;
 
-        // Workspace currency, falling back to the platform default.
-        $currency = optional(auth()->user()?->currentWorkspace)->currency
-            ?? strtoupper((string) SystemSetting::get('default_currency', 'USD'));
+        // Subscription plans always display in the platform billing currency.
+        $currency = ZanaPlatformBillingCurrency::code();
 
         // All admin-editable from /admin/checkout-settings and /admin/pricing-faqs.
         $yearlyEnabled     = (bool) SystemSetting::get('pricing.yearly_toggle_enabled', true);

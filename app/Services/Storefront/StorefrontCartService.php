@@ -7,6 +7,7 @@ use App\Models\ScheduledMessage;
 use App\Models\StorefrontCartRecovery;
 use App\Models\WaProduct;
 use App\Models\WaStorefront;
+use App\Support\ZanaStorefrontCurrency;
 use App\Services\NodeSchedulerClient;
 use App\Services\WorkspaceEngine;
 use Illuminate\Support\Facades\Log;
@@ -74,7 +75,7 @@ class StorefrontCartService
         // Light token substitution so a custom message can use placeholders.
         $message = strtr($message, [
             '{name}' => $firstName, '{shop}' => $shopName, '{url}' => $shopUrl,
-            '{total}' => WaProduct::formatCurrency($subtotalMinor, $sf->currency_code ?: 'INR'),
+            '{total}' => ZanaStorefrontCurrency::formatStorefrontMinor($subtotalMinor, $sf),
         ]);
 
         $when = now()->addMinutes($delayMin);
@@ -109,7 +110,7 @@ class StorefrontCartService
                 'customer_name'  => $name ?: null,
                 'items_json'     => $items,
                 'subtotal_minor' => $subtotalMinor,
-                'currency_code'  => $sf->currency_code ?: 'INR',
+                'currency_code'  => ZanaStorefrontCurrency::code($sf),
                 'scheduled_ids'  => [$row->id],
                 'status'         => 'active',
             ]);

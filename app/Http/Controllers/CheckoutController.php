@@ -15,6 +15,7 @@ use App\Services\Payment\PaymentGatewayManager;
 use App\Services\Payment\PaymentResult;
 use App\Services\Payment\SubscriptionService;
 use App\Support\FormatSettings;
+use App\Support\ZanaPlatformBillingCurrency;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -171,8 +172,7 @@ class CheckoutController extends Controller
         return view('pricing.index', [
             'packages' => $packages,
             'addons'   => $addons,
-            'currency' => optional($request->user()?->currentWorkspace)->currency
-                ?? strtoupper((string) \App\Models\SystemSetting::get('default_currency', 'USD')),
+            'currency' => ZanaPlatformBillingCurrency::code(),
             // Everything below is admin-editable from /admin/checkout-settings.
             'yearlyEnabled'     => (bool) \App\Models\SystemSetting::get('pricing.yearly_toggle_enabled', true),
             'yearlyDiscountPct' => (int)  \App\Models\SystemSetting::get('pricing.yearly_discount_pct', 20),
@@ -210,9 +210,10 @@ class CheckoutController extends Controller
         // currencies an active gateway accepts.
         $available = $this->availableCheckoutCurrencies();
         $requested = strtoupper((string) $request->query('currency', ''));
+        $platformCurrency = ZanaPlatformBillingCurrency::code($package);
         $currency  = ($requested && in_array($requested, $available, true))
             ? $requested
-            : strtoupper((string) ($ws?->currency ?: $package->currency ?: 'USD'));
+            : $platformCurrency;
         if (!in_array($currency, $available, true)) { array_unshift($available, $currency); }
         $gateways = $this->manager->activeGateways($currency);
 
@@ -275,7 +276,7 @@ class CheckoutController extends Controller
 
         // Currency for the preview's currency-lock check — mirror what
         // process() will bill in (workspace currency, then plan, then USD).
-        $previewCurrency = strtoupper((string) (optional($user->currentWorkspace)->currency ?: $package->currency ?: 'USD'));
+        $previewCurrency = ZanaPlatformBillingCurrency::code($package);
         $result = \App\Models\Coupon::resolve($data['code'], $package, (float) $data['amount'], $user, $previewCurrency);
 
         return response()->json([
@@ -311,7 +312,7 @@ class CheckoutController extends Controller
 
         $gateway = PaymentGateway::findOrFail($data['gateway_id']);
         if (!$gateway->is_active) return back()->with('error', 'That gateway is not currently available.');
-        $currency = strtoupper($data['currency'] ?: ($ws->currency ?: $package->currency ?: 'USD'));
+        $currency = strtoupper((string) ($data['currency'] ?: ZanaPlatformBillingCurrency::code($package)));
         if (!$gateway->acceptsCurrency($currency)) return back()->with('error', $gateway->name . ' does not support ' . $currency . '.');
 
         // Convert package price into the order's currency. chargeableAmount()

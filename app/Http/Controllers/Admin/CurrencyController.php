@@ -169,7 +169,7 @@ class CurrencyController extends Controller
         ]);
         $previous = strtoupper((string) SystemSetting::get('default_currency', 'USD'));
         $next     = strtoupper($data['code']);
-        SystemSetting::set('default_currency', $next);
+        SystemSetting::set('default_currency', $next, 'string');
         FormatSettings::flushCache();
         Audit::log('admin.currency.default_changed', [
             'meta' => ['previous' => $previous, 'now' => $next],

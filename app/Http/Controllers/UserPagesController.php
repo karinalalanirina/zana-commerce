@@ -577,6 +577,91 @@ class UserPagesController extends Controller
             $recentFlows = [];
         }
 
+        // ─── Zana business-first dashboard summary ───
+        $displayCurrency = (string) ($user?->currentWorkspace?->currency
+            ?: \App\Models\SystemSetting::get('default_currency', 'USD'));
+        $todaySalesMinor = 0;
+        $todayOrdersCount = 0;
+        $ordersAwaitingPayment = 0;
+        $ordersInProgress = 0;
+        $paidOrdersCount = 0;
+        $offlineDevices = max(0, (int) $devicesTotalAll - (int) $devicesActive);
+        $openInboxCount = 0;
+        $unassignedInboxCount = 0;
+        $teamMembersCount = 0;
+        $assignedInboxCount = 0;
+        $topProductsSummary = [];
+
+        if ($wsId) {
+            $todayStart = $now->copy()->startOfDay();
+            $todayEnd = $now->copy()->endOfDay();
+
+            $orderBase = \App\Models\WaOrder::query()->forWorkspace($wsId);
+            $todayOrders = (clone $orderBase)->whereBetween('created_at', [$todayStart, $todayEnd]);
+            $todayOrdersCount = (clone $todayOrders)->count();
+            $todaySalesMinor = (int) (clone $todayOrders)
+                ->whereIn('status', ['paid', 'processing', 'completed', 'shipped'])
+                ->sum('total_minor');
+            $ordersAwaitingPayment = (int) (clone $orderBase)
+                ->whereIn('status', ['new', 'pending', 'confirmed'])
+                ->count();
+            $ordersInProgress = (int) (clone $orderBase)
+                ->whereIn('status', ['processing', 'shipped'])
+                ->count();
+            $paidOrdersCount = (int) (clone $orderBase)
+                ->whereIn('status', ['paid', 'completed'])
+                ->count();
+
+            $conversationBase = \App\Models\Conversation::query()
+                ->where('workspace_id', $wsId)
+                ->forCurrentEngine();
+            $openInboxCount = (int) (clone $conversationBase)->open()->count();
+            $unassignedInboxCount = (int) (clone $conversationBase)->open()->unassigned()->count();
+            $assignedInboxCount = max(0, $openInboxCount - $unassignedInboxCount);
+            $teamMembersCount = (int) \App\Models\User::query()
+                ->where('current_workspace_id', $wsId)
+                ->count();
+
+            $topProductRows = \App\Models\WaOrderItem::query()
+                ->join('wa_orders', 'wa_orders.id', '=', 'wa_order_items.order_id')
+                ->where('wa_orders.workspace_id', $wsId)
+                ->where('wa_orders.created_at', '>=', $now->copy()->subDays(30))
+                ->selectRaw('COALESCE(NULLIF(wa_order_items.name, ""), "Product") as name, SUM(wa_order_items.quantity) as qty')
+                ->groupBy('name')
+                ->orderByDesc('qty')
+                ->limit(5)
+                ->get();
+
+            if ($topProductRows->isEmpty()) {
+                $topProductRows = \App\Models\WaProduct::query()
+                    ->where('workspace_id', $wsId)
+                    ->orderByDesc('updated_at')
+                    ->limit(5)
+                    ->get(['name'])
+                    ->map(fn ($row) => (object) ['name' => $row->name, 'qty' => 0]);
+            }
+
+            $topProductsSummary = $topProductRows->map(fn ($row) => [
+                'name' => (string) ($row->name ?: 'Product'),
+                'qty' => (int) ($row->qty ?? 0),
+            ])->all();
+        }
+
+        $zanaDashboardSummary = [
+            'today_sales_display' => \App\Support\FormatSettings::formatIn($todaySalesMinor / 100, $displayCurrency),
+            'today_orders_count' => $todayOrdersCount,
+            'orders_awaiting_payment' => $ordersAwaitingPayment,
+            'orders_in_progress' => $ordersInProgress,
+            'paid_orders_count' => $paidOrdersCount,
+            'open_inbox_count' => $openInboxCount,
+            'unassigned_inbox_count' => $unassignedInboxCount,
+            'assigned_inbox_count' => $assignedInboxCount,
+            'offline_devices' => $offlineDevices,
+            'team_members_count' => $teamMembersCount,
+            'top_products' => $topProductsSummary,
+            'display_currency' => $displayCurrency,
+        ];
+
         return view('user.dashboard.index', [
             'recentFlows'      => $recentFlows,
             'walletCredits'    => $credits,
@@ -656,6 +741,7 @@ class UserPagesController extends Controller
             // Sales Pipeline KPIs — null when the plan lacks the feature, so
             // the dashboard card stays hidden for non-CRM workspaces.
             'dealStats'            => $this->dealStats($user),
+            'zanaDashboardSummary' => $zanaDashboardSummary,
         ]);
     }
 

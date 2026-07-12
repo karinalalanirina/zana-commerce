@@ -64,8 +64,8 @@
                 'brand' => $product->brand ? ['@type' => 'Brand', 'name' => $product->brand] : null,
                 'offers' => [
                     '@type' => 'Offer',
-                    'price' => number_format(((int) $product->price_minor) / 100, 2, '.', ''),
-                    'priceCurrency' => $product->currency_code ?: $sf->currency_code ?? 'INR',
+                    'price' => number_format(((int) $product->storefrontPriceMinor($sf)) / 100, 2, '.', ''),
+                    'priceCurrency' => \App\Support\ZanaStorefrontCurrency::code($sf, $workspace ?? null),
                     'availability' =>
                         $product->effective_availability === 'in stock'
                             ? 'https://schema.org/InStock'
@@ -777,7 +777,7 @@
 // fall back to 999 in the storefront currency for legacy stores.
 $freeMinor = (int) ($sf->shipping_json['free_threshold'] ?? 99900);
 $freeMajor = $freeMinor / 100;
-$freeText = \App\Support\FormatSettings::formatIn($freeMajor, $sf->currency_code ?? 'USD');
+$freeText = \App\Support\ZanaStorefrontCurrency::formatStorefrontMinor($freeMinor, $sf);
                 @endphp
                 <a
                     href="javascript:STOREFRONT.modal({title:'Shipping & delivery',body:'Orders are confirmed via WhatsApp. Delivery times depend on your location — typically 2-5 business days. Free shipping above {{ $freeText }}.',confirm:'OK'})">{{ __('Shipping') }}</a>
@@ -810,7 +810,7 @@ $freeText = \App\Support\FormatSettings::formatIn($freeMajor, $sf->currency_code
         window.SF_SHOP = {
             id: {{ $sf->id }},
             name: {!! json_encode($shopName) !!},
-            currency: {!! json_encode($sf->currency_code ?? 'INR') !!},
+            currency: {!! json_encode(\App\Support\ZanaStorefrontCurrency::code($sf, $workspace ?? null)) !!},
             shipping: @json($sf->shipping_json ?? null),
             payment: {
                 provider: {!! json_encode($sf->payment_provider) !!},
@@ -822,8 +822,8 @@ $freeText = \App\Support\FormatSettings::formatIn($freeMajor, $sf->currency_code
             @foreach ($products as $p)
                 window.SF_CATALOG[{{ $p->id }}] = {
                     name: {!! json_encode($p->name) !!},
-                    price: {{ $p->price_minor }},
-                    compare: {{ $p->compare_price_minor ?? 'null' }},
+                    price: {{ $p->storefrontPriceMinor($sf) }},
+                    compare: {{ $p->storefrontComparePriceMinor($sf) ?? 'null' }},
                     image: {!! json_encode($p->image_url) !!},
                     url: {!! json_encode(url('/s/' . $sf->slug . '/p/' . $p->slug)) !!},
                     slug: {!! json_encode($p->slug) !!},
@@ -831,15 +831,15 @@ $freeText = \App\Support\FormatSettings::formatIn($freeMajor, $sf->currency_code
                     category: {!! json_encode($p->category) !!},
                     description: {!! json_encode($p->description) !!},
                     stock_qty: {{ $p->stock_qty ?? 'null' }},
-                    currency: {!! json_encode($p->currency_code) !!},
+                    currency: {!! json_encode(\App\Support\ZanaStorefrontCurrency::code($sf, $workspace ?? null)) !!},
                 };
             @endforeach
         @endif
         @if (!empty($product))
             window.SF_CATALOG[{{ $product->id }}] = {
                 name: {!! json_encode($product->name) !!},
-                price: {{ $product->price_minor }},
-                compare: {{ $product->compare_price_minor ?? 'null' }},
+                price: {{ $product->storefrontPriceMinor($sf) }},
+                compare: {{ $product->storefrontComparePriceMinor($sf) ?? 'null' }},
                 image: {!! json_encode($product->image_url) !!},
                 url: {!! json_encode(url('/s/' . $sf->slug . '/p/' . $product->slug)) !!},
                 slug: {!! json_encode($product->slug) !!},
@@ -852,8 +852,8 @@ $freeText = \App\Support\FormatSettings::formatIn($freeMajor, $sf->currency_code
             @foreach ($related as $p)
                 window.SF_CATALOG[{{ $p->id }}] = {
                     name: {!! json_encode($p->name) !!},
-                    price: {{ $p->price_minor }},
-                    compare: {{ $p->compare_price_minor ?? 'null' }},
+                    price: {{ $p->storefrontPriceMinor($sf) }},
+                    compare: {{ $p->storefrontComparePriceMinor($sf) ?? 'null' }},
                     image: {!! json_encode($p->image_url) !!},
                     url: {!! json_encode(url('/s/' . $sf->slug . '/p/' . $p->slug)) !!},
                     slug: {!! json_encode($p->slug) !!},

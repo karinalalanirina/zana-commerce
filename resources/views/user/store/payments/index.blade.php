@@ -4,6 +4,34 @@
             @include('user.store._sidebar', ['current' => 'payments', 'cfg' => $cfg, 'sf' => $sf])
 
             <section class="space-y-5 min-w-0">
+                @if (!$marketReady)
+                    <div>
+                        <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-500">{{ __('Store / Payments') }}</div>
+                        <h1 class="font-serif text-[26px] sm:text-[34px] leading-tight tracking-[-0.02em]">{{ __('Merchant payments for this market') }}</h1>
+                        <p class="text-[13px] text-ink-600 mt-1 max-w-2xl">
+                            {{ __('This page stays reserved for India-specific native WhatsApp Pay and Razorpay-led in-chat payments. For Zana’s Africa launch, use storefront orders, payment instructions, manual payment links, and manual confirmation instead.') }}</p>
+                    </div>
+
+                    <div class="rounded-2xl border border-paper-200 bg-paper-0 p-5 shadow-card space-y-4">
+                        <div class="rounded-[14px] border border-wa-green/30 bg-wa-mint/40 px-4 py-3 text-[12.5px] text-ink-700">
+                            <b>{{ __('Africa launch path') }}</b>
+                            {{ __('Customer orders through storefront or WhatsApp, merchant sends payment instructions or an external payment link, customer pays, merchant confirms, and Zana follows up until payment is complete.') }}
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <a href="{{ route('user.store.storefront.edit') }}" class="rounded-2xl border border-paper-200 bg-paper-50 p-4 hover:border-wa-deep/30 hover:bg-paper-0 transition">
+                                <div class="font-semibold text-ink-900">{{ __('Open storefront payment setup') }}</div>
+                                <div class="mt-1 text-[12px] text-ink-500">{{ __('Set M-Pesa instructions, bank transfer details, accepted methods, and a default payment message template.') }}</div>
+                            </a>
+                            <a href="{{ route('user.store.orders.index') }}" class="rounded-2xl border border-paper-200 bg-paper-50 p-4 hover:border-wa-deep/30 hover:bg-paper-0 transition">
+                                <div class="font-semibold text-ink-900">{{ __('Open orders') }}</div>
+                                <div class="mt-1 text-[12px] text-ink-500">{{ __('Send payment instructions, share manual payment links, mark customer says paid, confirm paid, or send reminders.') }}</div>
+                            </a>
+                        </div>
+                        <div class="text-[12px] text-ink-500">
+                            {{ __('India-specific native WhatsApp Pay is kept in the codebase for later markets, but it is hidden from the Africa-first merchant experience.') }}
+                        </div>
+                    </div>
+                @else
                 <div>
                     <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-500">{{ __('Store / Payments') }}</div>
                     <h1 class="font-serif text-[26px] sm:text-[34px] leading-tight tracking-[-0.02em]">{{ __('WhatsApp Pay') }} <span class="italic text-wa-deep">{{ __('in-chat') }}</span></h1>
@@ -116,6 +144,7 @@
                         <div class="px-5 py-10 text-center text-[13px] text-ink-500">{{ __('No payment configurations yet. Add one above to start collecting in-chat payments.') }}</div>
                     @endforelse
                 </div>
+                @endif
             </section>
         </div>
     </main>

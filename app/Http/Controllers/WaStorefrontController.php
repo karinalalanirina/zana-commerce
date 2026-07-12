@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\WaStorefront;
+use App\Support\ZanaStorefrontCurrency;
 use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -50,8 +51,16 @@ class WaStorefrontController extends Controller
             'shipping_free_above' => ['nullable', 'numeric', 'min:0', 'max:1000000'],
             'shipping_note'       => ['nullable', 'string', 'max:160'],
             // Payment
-            'payment_provider'    => ['nullable', 'string', 'in:upi,razorpay_link,razorpay_api,stripe_link,paypal_me,bank_transfer'],
+            'payment_provider'    => ['nullable', 'string', 'in:manual_instructions,external_link,bank_transfer,cash_on_delivery,upi,razorpay_link,razorpay_api,stripe_link,paypal_me'],
             'payment_handle'      => ['nullable', 'string', 'max:255'],
+            'accepted_payment_methods_text' => ['nullable', 'string', 'max:255'],
+            'default_payment_instructions_template' => ['nullable', 'string', 'max:1500'],
+            'mpesa_till_number'   => ['nullable', 'string', 'max:64'],
+            'mpesa_paybill_number'=> ['nullable', 'string', 'max:64'],
+            'mpesa_business_name' => ['nullable', 'string', 'max:120'],
+            'payment_reference_format' => ['nullable', 'string', 'max:120'],
+            'bank_transfer_instructions' => ['nullable', 'string', 'max:500'],
+            'external_payment_link' => ['nullable', 'url', 'max:1024'],
             // Razorpay API (auto payment links + webhook auto-confirm)
             'rzp_key_id'          => ['nullable', 'string', 'max:191'],
             'rzp_key_secret'      => ['nullable', 'string', 'max:191'],
@@ -68,11 +77,23 @@ class WaStorefrontController extends Controller
             'note'              => $data['shipping_note'] ?? null,
         ], fn ($v) => $v !== null && $v !== 0 && $v !== '');
 
+        $existing = is_array($sf->payment_config_json) ? $sf->payment_config_json : [];
+        $paymentCfg = array_filter([
+            'handle' => trim((string) ($data['payment_handle'] ?? '')) ?: ($existing['handle'] ?? null),
+            'accepted_payment_methods_text' => trim((string) ($data['accepted_payment_methods_text'] ?? '')) ?: null,
+            'default_payment_instructions_template' => trim((string) ($data['default_payment_instructions_template'] ?? '')) ?: null,
+            'mpesa_till_number' => trim((string) ($data['mpesa_till_number'] ?? '')) ?: null,
+            'mpesa_paybill_number' => trim((string) ($data['mpesa_paybill_number'] ?? '')) ?: null,
+            'mpesa_business_name' => trim((string) ($data['mpesa_business_name'] ?? '')) ?: null,
+            'payment_reference_format' => trim((string) ($data['payment_reference_format'] ?? '')) ?: null,
+            'bank_transfer_instructions' => trim((string) ($data['bank_transfer_instructions'] ?? '')) ?: null,
+            'external_payment_link' => trim((string) ($data['external_payment_link'] ?? '')) ?: null,
+        ], fn ($v) => $v !== null && $v !== '');
+
         if (($data['payment_provider'] ?? null) === 'razorpay_api') {
             // Secrets: encrypt at rest; keep the existing value when the field
             // is left blank (so re-saving the form doesn't wipe stored keys).
-            $existing = is_array($sf->payment_config_json) ? $sf->payment_config_json : [];
-            $paymentCfg = array_filter([
+            $paymentCfg = array_filter($paymentCfg + [
                 'key_id'         => trim((string) ($data['rzp_key_id'] ?? '')) ?: ($existing['key_id'] ?? null),
                 'key_secret'     => !empty($data['rzp_key_secret'])
                     ? \App\Services\Storefront\StorefrontPaymentService::encryptSecret($data['rzp_key_secret'])
@@ -81,10 +102,6 @@ class WaStorefrontController extends Controller
                     ? \App\Services\Storefront\StorefrontPaymentService::encryptSecret($data['rzp_webhook_secret'])
                     : ($existing['webhook_secret'] ?? null),
             ], fn ($v) => $v !== null && $v !== '');
-        } else {
-            $paymentCfg = !empty($data['payment_handle'])
-                ? ['handle' => $data['payment_handle']]
-                : null;
         }
 
         $sf->fill([
@@ -92,7 +109,7 @@ class WaStorefrontController extends Controller
             'theme_key' => $data['theme_key'],
             'enabled'   => (bool) ($data['enabled'] ?? true),
             'custom_domain' => $data['custom_domain'] ?? null,
-            'currency_code' => $data['currency_code'] ?? ($sf->currency_code ?? 'INR'),
+            'currency_code' => $data['currency_code'] ?? ZanaStorefrontCurrency::code($sf),
             'shipping_json' => $shipping ?: null,
             'payment_provider' => $data['payment_provider'] ?? null,
             'payment_config_json' => $paymentCfg,

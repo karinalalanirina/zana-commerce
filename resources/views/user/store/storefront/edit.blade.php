@@ -173,7 +173,7 @@
         'BDT' => '৳ BDT · Bangladeshi Taka',
         'LKR' => 'Rs LKR · Sri Lankan Rupee',
     ] as $c => $l)
-                                    <option value="{{ $c }}" @selected(old('currency_code', $sf->currency_code ?? 'INR') === $c)>
+                                    <option value="{{ $c }}" @selected(old('currency_code', $sf->currency_code ?? \App\Support\ZanaStorefrontCurrency::code($sf, $sf->workspace)) === $c)>
                                         {{ $l }}</option>
                                 @endforeach
                             </select>
@@ -225,9 +225,9 @@
                     @php $pay = $sf->payment_config_json ?? []; @endphp
                     <div class="pt-3 border-t border-paper-200">
                         <div class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-500 mb-2">
-                            {{ __('Payment link') }}</div>
+                            {{ __('Merchant payment setup') }}</div>
                         <p class="text-[11.5px] text-ink-500 mb-3">
-                            {{ __("Pick a payment provider and we'll append the payment link to every WhatsApp order message. Buyer pays via the link, you confirm in chat. No checkout flow built into the storefront.") }}
+                            {{ __("Configure the Africa-first payment setup you want Zana operators to use: M-Pesa instructions, bank transfer details, a reusable payment link, and a default payment message. Buyers still pay manually unless you later connect an automated provider.") }}
                         </p>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -236,13 +236,16 @@
                                 <select name="payment_provider" data-payment-provider
                                     class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] focus:outline-none focus:border-wa-deep focus:ring-4 focus:ring-wa-deep/10">
                                     @foreach ([
-        '' => 'None · cash on delivery',
-        'upi' => 'UPI (India) — VPA + name',
-        'razorpay_link' => 'Razorpay Payment Link (paste static link)',
-        'razorpay_api' => 'Razorpay (auto-generate links + auto-confirm)',
-        'stripe_link' => 'Stripe Payment Link',
-        'paypal_me' => 'PayPal.me handle',
+        '' => 'Choose later',
+        'manual_instructions' => 'Manual payment instructions',
+        'external_link' => 'External payment link',
         'bank_transfer' => 'Bank transfer instructions',
+        'cash_on_delivery' => 'Cash on delivery',
+        'upi' => 'UPI (India only)',
+        'razorpay_link' => 'Razorpay link (later / India-oriented)',
+        'razorpay_api' => 'Razorpay auto-link (later / India-oriented)',
+        'stripe_link' => 'Stripe payment link',
+        'paypal_me' => 'PayPal.me handle',
     ] as $key => $label)
                                         <option value="{{ $key }}" @selected(old('payment_provider', $sf->payment_provider) === $key)>
                                             {{ $label }}</option>
@@ -252,13 +255,71 @@
 
                             <label class="block">
                                 <span
-                                    class="text-[11.5px] font-semibold text-ink-700">{{ __('Payment detail') }}</span>
+                                    class="text-[11.5px] font-semibold text-ink-700">{{ __('Primary payment detail') }}</span>
                                 <input type="text" name="payment_handle" maxlength="255"
                                     value="{{ old('payment_handle', $pay['handle'] ?? '') }}"
-                                    placeholder="e.g. shop@upi · https://rzp.io/l/xxx"
+                                    placeholder="e.g. https://paystack.com/pay/... or bank account name"
                                     class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] font-mono focus:outline-none focus:border-wa-deep focus:ring-4 focus:ring-wa-deep/10" />
                                 <span
-                                    class="text-[10.5px] text-ink-500 mt-1 block">{{ __('UPI VPA, payment link URL, PayPal.me handle, or bank account.') }}</span>
+                                    class="text-[10.5px] text-ink-500 mt-1 block">{{ __('Use this for a pasted payment link, a bank transfer headline, or another manual payment pointer.') }}</span>
+                            </label>
+                        </div>
+
+                        <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <label class="block">
+                                <span class="text-[11.5px] font-semibold text-ink-700">{{ __('M-Pesa business name') }}</span>
+                                <input type="text" name="mpesa_business_name" maxlength="120"
+                                    value="{{ old('mpesa_business_name', $pay['mpesa_business_name'] ?? '') }}"
+                                    placeholder="e.g. Zuri Beauty Store"
+                                    class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] focus:outline-none focus:border-wa-deep focus:ring-4 focus:ring-wa-deep/10" />
+                            </label>
+                            <label class="block">
+                                <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Accepted payment methods text') }}</span>
+                                <input type="text" name="accepted_payment_methods_text" maxlength="255"
+                                    value="{{ old('accepted_payment_methods_text', $pay['accepted_payment_methods_text'] ?? '') }}"
+                                    placeholder="M-Pesa, Paystack link, Flutterwave link, bank transfer"
+                                    class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] focus:outline-none focus:border-wa-deep focus:ring-4 focus:ring-wa-deep/10" />
+                            </label>
+                            <label class="block">
+                                <span class="text-[11.5px] font-semibold text-ink-700">{{ __('M-Pesa Till number') }}</span>
+                                <input type="text" name="mpesa_till_number" maxlength="64"
+                                    value="{{ old('mpesa_till_number', $pay['mpesa_till_number'] ?? '') }}"
+                                    placeholder="e.g. 123456"
+                                    class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] font-mono focus:outline-none focus:border-wa-deep focus:ring-4 focus:ring-wa-deep/10" />
+                            </label>
+                            <label class="block">
+                                <span class="text-[11.5px] font-semibold text-ink-700">{{ __('M-Pesa Paybill number') }}</span>
+                                <input type="text" name="mpesa_paybill_number" maxlength="64"
+                                    value="{{ old('mpesa_paybill_number', $pay['mpesa_paybill_number'] ?? '') }}"
+                                    placeholder="e.g. 400200"
+                                    class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] font-mono focus:outline-none focus:border-wa-deep focus:ring-4 focus:ring-wa-deep/10" />
+                            </label>
+                            <label class="block">
+                                <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Payment reference / account format') }}</span>
+                                <input type="text" name="payment_reference_format" maxlength="120"
+                                    value="{{ old('payment_reference_format', $pay['payment_reference_format'] ?? '') }}"
+                                    placeholder="e.g. ORDER-{order_id} or customer phone"
+                                    class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] focus:outline-none focus:border-wa-deep focus:ring-4 focus:ring-wa-deep/10" />
+                            </label>
+                            <label class="block">
+                                <span class="text-[11.5px] font-semibold text-ink-700">{{ __('External payment link') }}</span>
+                                <input type="url" name="external_payment_link" maxlength="1024"
+                                    value="{{ old('external_payment_link', $pay['external_payment_link'] ?? '') }}"
+                                    placeholder="https://paystack.com/pay/your-link"
+                                    class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] font-mono focus:outline-none focus:border-wa-deep focus:ring-4 focus:ring-wa-deep/10" />
+                            </label>
+                            <label class="block sm:col-span-2">
+                                <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Bank transfer instructions') }}</span>
+                                <textarea name="bank_transfer_instructions" rows="2" maxlength="500"
+                                    class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] focus:outline-none focus:border-wa-deep focus:ring-4 focus:ring-wa-deep/10"
+                                    placeholder="Bank name, account number, account name, branch, or transfer note">{{ old('bank_transfer_instructions', $pay['bank_transfer_instructions'] ?? '') }}</textarea>
+                            </label>
+                            <label class="block sm:col-span-2">
+                                <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Default payment instructions template') }}</span>
+                                <textarea name="default_payment_instructions_template" rows="4" maxlength="1500"
+                                    class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] focus:outline-none focus:border-wa-deep focus:ring-4 focus:ring-wa-deep/10"
+                                    placeholder="Hi {customer_name}, your order {order_id} is awaiting payment. Use M-Pesa Till {mpesa_till} or Paybill {mpesa_paybill}. Reference: {payment_reference}. Payment link: {external_payment_link}">{{ old('default_payment_instructions_template', $pay['default_payment_instructions_template'] ?? '') }}</textarea>
+                                <span class="text-[10.5px] text-ink-500 mt-1 block">{{ __('Available placeholders: {customer_name}, {order_id}, {order_total}, {business_name}, {mpesa_till}, {mpesa_paybill}, {payment_reference}, {external_payment_link}, {bank_transfer_instructions}, {accepted_payment_methods}.') }}</span>
                             </label>
                         </div>
 
@@ -271,7 +332,7 @@
                         @endphp
                         <div class="mt-3 border border-paper-200 rounded-xl p-3 bg-paper-50/50">
                             <div class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-500 mb-2">
-                                {{ __('Razorpay API (auto links)') }}</div>
+                                {{ __('Razorpay API (later / optional)') }}</div>
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <label class="block"><span
                                         class="text-[11px] text-ink-700">{{ __('Key ID') }}</span>
@@ -291,7 +352,7 @@
                                         class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[12.5px] font-mono focus:outline-none focus:border-wa-deep"></label>
                             </div>
                             <span
-                                class="text-[10.5px] text-ink-500 mt-2 block">{{ __('In Razorpay dashboard, set the webhook URL to') }}
+                                class="text-[10.5px] text-ink-500 mt-2 block">{{ __('Keep this only if you plan to use the India/Razorpay auto-link path later. In Razorpay dashboard, set the webhook URL to') }}
                                 <code class="font-mono">{{ url('/webhooks/storefront-pay') }}</code>
                                 {{ __('for the payment_link.paid event.') }}</span>
                         </div>

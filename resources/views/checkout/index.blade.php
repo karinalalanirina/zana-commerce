@@ -283,7 +283,7 @@
                         $totalMajor = $total / 100;
                         // Display the checkout amounts in the package's native currency.
 // formatIn => no conversion (customer pays exactly what's shown).
-                        $payCur = $package?->currency_code ?? \App\Models\SystemSetting::get('default_currency', 'USD');
+                        $payCur = $package?->currency ?? \App\Support\ZanaPlatformBillingCurrency::code($package);
                         $fmt = fn($n) => \App\Support\FormatSettings::formatIn($n, $payCur);
                     @endphp
 

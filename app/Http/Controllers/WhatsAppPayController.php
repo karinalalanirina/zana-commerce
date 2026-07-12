@@ -6,6 +6,7 @@ use App\Models\WaOrder;
 use App\Models\WaProviderConfig;
 use App\Models\WaStorefront;
 use App\Models\WorkspacePaymentConfig;
+use App\Support\ZanaAfricaPayments;
 use App\Services\Waba\WhatsAppPayService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -37,24 +38,29 @@ class WhatsAppPayController extends Controller
         // pay is India-only — surface clearly rather than hard-hide.
         $country  = $this->detectCountry($waba);
         $regionOk = WorkspacePaymentConfig::isCountrySupported($country);
+        $marketReady = ZanaAfricaPayments::indiaMerchantPaymentsAvailable($country);
 
         $sf = $wsId ? WaStorefront::where('workspace_id', $wsId)->first() : null;
         $cfg = $waba;
 
-        return view('user.store.payments.index', compact('configs', 'waba', 'country', 'regionOk', 'sf', 'cfg'));
+        return view('user.store.payments.index', compact('configs', 'waba', 'country', 'regionOk', 'marketReady', 'sf', 'cfg'));
     }
 
     public function store(Request $request)
     {
         $wsId = (int) ($request->user()->current_workspace_id ?? 0);
+        $waba = WaProviderConfig::query()->where('workspace_id', $wsId)->where('provider', 'waba')->first();
+        if (!ZanaAfricaPayments::indiaMerchantPaymentsAvailable($this->detectCountry($waba))) {
+            return redirect()->route('user.store.orders.index')
+                ->with('status', __('Native WhatsApp Pay is not configured for this market yet. Use storefront orders, payment instructions, and manual payment confirmation instead.'));
+        }
+
         $data = $request->validate([
             'config_name'  => 'required|string|max:60',
             'payment_type' => 'required|in:' . implode(',', WorkspacePaymentConfig::PAYMENT_TYPES),
             'is_active'    => 'nullable|boolean',
             'auto_charge'  => 'nullable|boolean',
         ]);
-
-        $waba = WaProviderConfig::query()->where('workspace_id', $wsId)->where('provider', 'waba')->first();
 
         WorkspacePaymentConfig::updateOrCreate(
             ['workspace_id' => $wsId, 'config_name' => trim($data['config_name'])],
@@ -74,6 +80,12 @@ class WhatsAppPayController extends Controller
     public function destroy(Request $request, int $id)
     {
         $wsId = (int) ($request->user()->current_workspace_id ?? 0);
+        $waba = WaProviderConfig::query()->where('workspace_id', $wsId)->where('provider', 'waba')->first();
+        if (!ZanaAfricaPayments::indiaMerchantPaymentsAvailable($this->detectCountry($waba))) {
+            return redirect()->route('user.store.orders.index')
+                ->with('status', __('Native WhatsApp Pay stays hidden for this market right now. Use storefront order payments instead.'));
+        }
+
         WorkspacePaymentConfig::query()->forWorkspace($wsId)->whereKey($id)->delete();
         return back()->with('status', __('Payment configuration removed.'));
     }
@@ -83,6 +95,10 @@ class WhatsAppPayController extends Controller
     {
         $wsId  = (int) ($request->user()->current_workspace_id ?? 0);
         $order = WaOrder::query()->where('workspace_id', $wsId)->whereKey($orderId)->firstOrFail();
+        $waba = WaProviderConfig::query()->where('workspace_id', $wsId)->where('provider', 'waba')->first();
+        if (!ZanaAfricaPayments::indiaMerchantPaymentsAvailable($this->detectCountry($waba))) {
+            return back()->withErrors(['wapay' => __('Native WhatsApp Pay is not configured for this market yet. Send manual payment instructions or a payment link from the order page instead.')]);
+        }
 
         $cfg = WorkspacePaymentConfig::query()->forWorkspace($wsId)->active()->first();
         if (!$cfg) {

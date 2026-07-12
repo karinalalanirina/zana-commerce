@@ -93,7 +93,7 @@
                             <input type="number" data-filter-max placeholder="{{ __('Max') }}"
                                 min="{{ $priceMin }}" max="{{ $priceMax }}">
                         </div>
-                        @php $sfRangeCur = $sf->currency_code ?? 'USD'; @endphp
+                        @php $sfRangeCur = \App\Support\ZanaStorefrontCurrency::code($sf, $workspace ?? null); @endphp
                         <div
                             style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#6B807C;margin-top:6px">
                             Range: {!! \App\Support\FormatSettings::formatIn($priceMin, $sfRangeCur) !!} — {!! \App\Support\FormatSettings::formatIn($priceMax, $sfRangeCur) !!}</div>

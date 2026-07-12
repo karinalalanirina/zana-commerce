@@ -88,12 +88,11 @@
                         @php
                             $isFree = $p->free || (float) $p->plan_amount === 0.0;
                             $isCustom = (bool) $p->is_custom_quote;
-                            $sym = html_entity_decode($p->currency_symbol ?? '$', ENT_QUOTES, 'UTF-8');
                             $price = $isCustom
                                 ? __('Custom')
                                 : ($isFree
                                     ? __('Free')
-                                    : $sym . number_format($p->chargeableAmount(), 0));
+                                    : \App\Support\ZanaPlatformBillingCurrency::formatPackageAmount($p));
                             $cta = $isCustom
                                 ? url('/support')
                                 : ($isFree

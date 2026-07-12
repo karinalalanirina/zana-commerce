@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ZanaStorefrontCurrency;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -58,6 +59,42 @@ class WaProduct extends Model
     {
         if ($this->compare_price_minor === null) return null;
         return self::formatCurrency($this->compare_price_minor, $this->currency_code);
+    }
+
+    public function storefrontPriceMinor(?WaStorefront $storefront = null): int
+    {
+        return ZanaStorefrontCurrency::convertMinorForStorefront(
+            (int) $this->price_minor,
+            $this->currency_code,
+            $storefront,
+            $this->workspace
+        );
+    }
+
+    public function storefrontComparePriceMinor(?WaStorefront $storefront = null): ?int
+    {
+        if ($this->compare_price_minor === null) {
+            return null;
+        }
+
+        return ZanaStorefrontCurrency::convertMinorForStorefront(
+            (int) $this->compare_price_minor,
+            $this->currency_code,
+            $storefront,
+            $this->workspace
+        );
+    }
+
+    public function storefrontPriceDisplay(?WaStorefront $storefront = null): string
+    {
+        return ZanaStorefrontCurrency::formatStorefrontMinor($this->storefrontPriceMinor($storefront), $storefront, $this->workspace);
+    }
+
+    public function storefrontComparePriceDisplay(?WaStorefront $storefront = null): ?string
+    {
+        $minor = $this->storefrontComparePriceMinor($storefront);
+
+        return $minor === null ? null : ZanaStorefrontCurrency::formatStorefrontMinor($minor, $storefront, $this->workspace);
     }
 
     public function getOnSaleAttribute(): bool

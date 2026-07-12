@@ -6,6 +6,7 @@ use App\Models\WaCoupon;
 use App\Models\WaOrder;
 use App\Models\WaProduct;
 use App\Models\WaStorefront;
+use App\Support\ZanaStorefrontCurrency;
 use App\Services\WhatsAppCatalog\CatalogSyncService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -48,20 +49,16 @@ class StorefrontCheckoutService
             ->keyBy('id');
         if ($products->isEmpty()) return null;
 
+        [$pricedItems, $subtotal] = $this->priceItems($sf, $data['items'] ?? []);
         $items = [];
-        $subtotal = 0;
-        foreach ($requested as $id => $qty) {
-            $p = $products->get($id);
-            if (!$p) continue;                              // dropped/unavailable since add-to-cart
-            if ($p->stock_qty !== null) $qty = min($qty, max(0, (int) $p->stock_qty));
-            if ($qty < 1) continue;                          // sold out
-            $line = (int) $p->price_minor * $qty;            // SERVER price — never trust the client
-            $subtotal += $line;
+        foreach ($pricedItems as $line) {
+            $p = $products->get((int) ($line['id'] ?? 0));
+            if (!$p) continue;
             $items[] = [
                 'product_id'  => $p->id,
                 'name'        => $p->name,
-                'qty'         => $qty,
-                'price_minor' => (int) $p->price_minor,
+                'qty'         => (int) $line['qty'],
+                'price_minor' => (int) $line['price_minor'],
                 'image'       => $p->image_url,
                 'retailer_id' => $p->meta_retailer_id ?: ($p->sku ?: null),
             ];
@@ -99,7 +96,7 @@ class StorefrontCheckoutService
                 'shipping_minor'   => $shipping,
                 'discount_minor'   => $discount,
                 'coupon_code'      => ($discount > 0 || ($coupon && $coupon->free_shipping)) ? $coupon->code : null,
-                'currency_code'    => $sf->currency_code ?: 'INR',
+                'currency_code'    => ZanaStorefrontCurrency::code($sf),
                 'payment_method'   => $method,
                 'rto_score'        => $rto['score'],
                 'rto_band'         => $rto['band'],
@@ -216,8 +213,9 @@ class StorefrontCheckoutService
             if (!$p) continue;
             if ($p->stock_qty !== null) $qty = min($qty, max(0, (int) $p->stock_qty));
             if ($qty < 1) continue;
-            $subtotal += (int) $p->price_minor * $qty;
-            $lines[] = ['id' => $p->id, 'qty' => $qty, 'price_minor' => (int) $p->price_minor];
+            $priceMinor = $p->storefrontPriceMinor($sf);
+            $subtotal += $priceMinor * $qty;
+            $lines[] = ['id' => $p->id, 'qty' => $qty, 'price_minor' => $priceMinor];
         }
 
         return [$lines, $subtotal];

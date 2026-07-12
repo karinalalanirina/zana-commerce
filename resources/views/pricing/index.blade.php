@@ -116,12 +116,12 @@
                             ? 'Custom'
                             : ($isFree
                                 ? 'Free'
-                                : \App\Support\FormatSettings::currency($amount));
+                                : \App\Support\ZanaPlatformBillingCurrency::formatAmount($amount, $currency));
                         $yearlyHuman = $isCustom
                             ? 'Custom'
                             : ($isFree
                                 ? 'Free'
-                                : \App\Support\FormatSettings::currency($yearlyAmount / 12));
+                                : \App\Support\ZanaPlatformBillingCurrency::formatAmount($yearlyAmount / 12, $currency));
                         // Set only on the in-app /account/plans render (PricingController).
                         $isCurrent = ($currentPackageId ?? null) && (int) $p->id === (int) $currentPackageId;
                         // Upgrade / downgrade gating: you can move UP to a pricier plan, but

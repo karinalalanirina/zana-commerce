@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\WaOrder;
+use App\Support\ZanaAfricaPayments;
 use App\Services\WhatsAppDispatcher;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -57,16 +58,42 @@ class WaOrderController extends Controller
             'status' => 'required|in:' . implode(',', WaOrder::STATUSES),
             'notes'  => 'nullable|string|max:1000',
             'payment_link' => 'nullable|url|max:1024',
+            'payment_action' => 'nullable|in:send_instructions,send_reminder,customer_says_paid,paid_confirmed,payment_failed,resend_link',
         ]);
+        $paymentAction = (string) ($data['payment_action'] ?? '');
+        $meta = is_array($order->meta_json) ? $order->meta_json : [];
+        $statusMap = [
+            'send_instructions' => 'pending',
+            'send_reminder' => 'pending',
+            'customer_says_paid' => 'confirmed',
+            'paid_confirmed' => 'paid',
+            'payment_failed' => 'cancelled',
+            'resend_link' => (string) $order->status,
+        ];
+        if ($paymentAction !== '' && isset($statusMap[$paymentAction])) {
+            $data['status'] = $statusMap[$paymentAction];
+            $meta['zana_payment_step'] = match ($paymentAction) {
+                'send_instructions' => 'awaiting_payment',
+                'send_reminder' => 'payment_reminder_sent',
+                'customer_says_paid' => 'customer_says_paid',
+                'paid_confirmed' => 'paid_confirmed',
+                'payment_failed' => 'payment_failed',
+                'resend_link' => 'payment_link_sent',
+                default => $meta['zana_payment_step'] ?? null,
+            };
+        }
+
         $statusChanged = (string) $order->status !== (string) $data['status'];
         $newLink       = trim((string) ($data['payment_link'] ?? ''));
-        $order->fill($data)->save();
+        $order->fill($data);
+        $order->meta_json = $meta;
+        $order->save();
 
         // DM the BUYER directly. The status-change observer (WaOrder::updated)
         // ONLY posts into the customer's WhatsApp group — so 1v1/normal orders
         // got no notice, and the payment link reached NOBODY (this form used to
         // just save it). Send the status change + payment link to customer_phone.
-        $this->notifyBuyer($order, $statusChanged, $newLink);
+        $this->notifyBuyer($order, $statusChanged, $newLink, $paymentAction);
 
         return redirect()->route('user.store.orders.show', $order->id)->with('status', 'Order updated.');
     }
@@ -78,20 +105,36 @@ class WaOrderController extends Controller
      * group). Localized to the customer's saved language. Best-effort; a send
      * failure never blocks the status save.
      */
-    private function notifyBuyer(WaOrder $order, bool $statusChanged, string $paymentLink): void
+    private function notifyBuyer(WaOrder $order, bool $statusChanged, string $paymentLink, string $paymentAction = ''): void
     {
         $phone = trim((string) $order->customer_phone);
-        if ($phone === '' || (!$statusChanged && $paymentLink === '')) return;
+        if ($phone === '' || (!$statusChanged && $paymentLink === '' && $paymentAction === '')) return;
 
         $lang = is_array($order->meta_json) ? ($order->meta_json['customer_lang'] ?? null) : null;
         $svc  = app(\App\Services\Ordering\OrderingService::class);
+        $storefront = $order->storefront()->first();
+        $manualInstructions = ZanaAfricaPayments::instructionsText($storefront, $order);
+        $externalPaymentLink = ZanaAfricaPayments::externalPaymentLink($storefront, $order);
 
         $lines = [];
-        if ($statusChanged) {
+        if (in_array($paymentAction, ['send_instructions', 'send_reminder'], true) && $manualInstructions) {
+            $prefix = $paymentAction === 'send_reminder'
+                ? $svc->localizeTo("Friendly reminder: payment is still pending for order #{$order->id}.", $lang)
+                : $svc->localizeTo("Here are your payment instructions for order #{$order->id}.", $lang);
+            $lines[] = $prefix . "\n" . $manualInstructions;
+        } elseif ($paymentAction === 'customer_says_paid') {
+            $lines[] = $svc->localizeTo("Thanks — we've marked your order #{$order->id} as customer-paid and we're verifying the payment now.", $lang);
+        } elseif ($paymentAction === 'paid_confirmed') {
+            $lines[] = $svc->localizeTo("Payment confirmed for order #{$order->id}. We'll continue processing it now.", $lang);
+        } elseif ($paymentAction === 'payment_failed') {
+            $lines[] = $svc->localizeTo("We could not confirm payment for order #{$order->id}. Please reply if you need fresh payment instructions.", $lang);
+        } elseif ($statusChanged) {
             $lines[] = $svc->localizeTo("Your order #{$order->id} is now: " . ucfirst((string) $order->status), $lang);
         }
         if ($paymentLink !== '') {
             $lines[] = $svc->localizeTo("Here's your payment link for {$order->total_display}:", $lang) . "\n" . $paymentLink;
+        } elseif ($paymentAction === 'resend_link' && $externalPaymentLink) {
+            $lines[] = $svc->localizeTo("Here's your payment link for {$order->total_display}:", $lang) . "\n" . $externalPaymentLink;
         }
         $body = trim(implode("\n\n", $lines));
         if ($body === '') return;

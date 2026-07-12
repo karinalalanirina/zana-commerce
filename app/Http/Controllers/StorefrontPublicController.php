@@ -6,6 +6,7 @@ use App\Models\WaProduct;
 use App\Models\WaProviderConfig;
 use App\Models\WaStorefront;
 use App\Models\WaProductReview;
+use App\Support\ZanaStorefrontCurrency;
 use App\Services\Storefront\StorefrontCheckoutService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -55,8 +56,9 @@ class StorefrontPublicController extends Controller
 
         // Price range for the filter sidebar (in major currency units
         // so the JS doesn't have to divide by 100 on every render).
-        $priceMin = $products->min('price_minor') ?? 0;
-        $priceMax = $products->max('price_minor') ?? 0;
+        $storefrontPrices = $products->map(fn (WaProduct $product) => $product->storefrontPriceMinor($sf));
+        $priceMin = $storefrontPrices->min() ?? 0;
+        $priceMax = $storefrontPrices->max() ?? 0;
 
         // AJAX append for "Show more" — return only the rendered card
         // HTML for the next page so the storefront can lazy-load.
