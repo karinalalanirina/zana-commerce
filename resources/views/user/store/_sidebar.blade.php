@@ -101,7 +101,7 @@ if ($cfgConnected) {
             @endif
         </div>
         <div class="font-serif text-[18px] leading-tight mt-3">
-            {{ $sf->shop_name ?: optional(auth()->user()->currentWorkspaceRel)->name ?? 'Your store' }}</div>
+            {{ optional($sf)->shop_name ?: optional(auth()->user()->currentWorkspaceRel)->name ?? 'Your store' }}</div>
         <div class="font-mono text-[10.5px] text-ink-500 mt-0.5 truncate">{{ $cfgLabel }}</div>
     </div>
 
