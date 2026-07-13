@@ -667,7 +667,7 @@ $logoName = $wsLogo ? ($__bw->name ?: $brandName) : $brandName;
                                 @foreach ($zanaMoreSections as $section)
                                     @php $sectionItems = array_values(array_filter($section['items'], fn ($item) => $item['visible'])); @endphp
                                     @if (!empty($sectionItems))
-                                        <section class="rounded-2xl border border-paper-100 bg-paper-50/70 p-2.5">
+                                        <section class="rounded-2xl border border-paper-100 bg-paper-0 p-2.5">
                                             <div class="px-1 pb-2 font-mono text-[10px] uppercase tracking-[0.15em] text-ink-500">
                                                 {{ $section['label'] }}</div>
                                             <div class="space-y-1">
