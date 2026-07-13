@@ -107,7 +107,9 @@
                     }
                 @endif
                 @if ($brandWs->brand_background)
-                    body {
+                    body,
+                    [data-site-header],
+                    [data-zana-nav-shell] {
                         background-color: var(--brand-bg) !important;
                     }
                 @endif

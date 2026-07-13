@@ -272,7 +272,7 @@ $navItems = array_values(
     ];
 @endphp
 
-<header class="relative z-40 bg-paper-0 hairline-b border-b border-paper-200">
+<header data-site-header class="relative z-40 bg-paper-0 hairline-b border-b border-paper-200">
     <div class="max-w-none mx-auto px-2 h-16 flex items-center gap-3 2xl:gap-1">
 
         @php
@@ -614,7 +614,7 @@ $logoName = $wsLogo ? ($__bw->name ?: $brandName) : $brandName;
     </div>
 </header>
 @if ($zanaMerchantNavV2)
-    <div class="relative z-30 border-b border-paper-200 bg-paper-50/80 backdrop-blur">
+    <div data-zana-nav-shell class="relative z-30 border-b border-paper-200 bg-paper-50/80 backdrop-blur">
         <div class="max-w-none mx-auto px-2 sm:px-4 lg:px-6 py-3">
             <div class="flex items-center gap-5">
                 <div class="relative flex-1 min-w-0">
