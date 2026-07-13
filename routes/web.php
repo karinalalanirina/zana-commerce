@@ -146,6 +146,10 @@ Route::post('/s/{slug}/abandon', [\App\Http\Controllers\StorefrontPublicControll
 // Razorpay webhook for storefront payment links (auth = HMAC signature).
 Route::post('/webhooks/storefront-pay', [\App\Http\Controllers\StorefrontPaymentController::class, 'razorpayWebhook'])
     ->name('storefront.pay.webhook');
+Route::post('/webhooks/storefront-pay/paystack', [\App\Http\Controllers\StorefrontPaymentController::class, 'paystackMerchantWebhook'])
+    ->name('storefront.pay.paystack.webhook');
+Route::post('/webhooks/storefront-pay/daraja-sandbox/{token}', [\App\Http\Controllers\StorefrontPaymentController::class, 'darajaSandboxWebhook'])
+    ->name('storefront.pay.daraja-sandbox.webhook');
 
 Route::prefix('checkout')->name('checkout.')->group(function () {
     Route::get('/',         [CheckoutPagesController::class, 'index'])->name('index');

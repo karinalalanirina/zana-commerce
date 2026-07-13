@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Message;
 use App\Models\User;
 use App\Models\WaOrder;
 use Illuminate\Support\Carbon;
@@ -24,6 +25,7 @@ class ZanaManualPayment
     public const METHODS = [
         'mpesa_till',
         'mpesa_paybill',
+        'daraja_stk',
         'bank_transfer',
         'payment_link',
         'cash',
@@ -78,6 +80,7 @@ class ZanaManualPayment
         return match ((string) $method) {
             'mpesa_till' => 'M-Pesa Till',
             'mpesa_paybill' => 'M-Pesa Paybill',
+            'daraja_stk' => 'Daraja STK',
             'bank_transfer' => 'Bank Transfer',
             'payment_link' => 'Payment Link',
             'cash' => 'Cash',
@@ -102,6 +105,22 @@ class ZanaManualPayment
         return $currency . ' ' . $value;
     }
 
+    public static function darajaMeta(?WaOrder $order): array
+    {
+        $payment = self::paymentMeta($order);
+        $daraja = $payment['daraja'] ?? [];
+
+        return is_array($daraja) ? $daraja : [];
+    }
+
+    public static function paystackMeta(?WaOrder $order): array
+    {
+        $payment = self::paymentMeta($order);
+        $paystack = $payment['paystack'] ?? [];
+
+        return is_array($paystack) ? $paystack : [];
+    }
+
     public static function timeline(?WaOrder $order): array
     {
         $meta = is_array($order?->meta_json) ? $order->meta_json : [];
@@ -109,6 +128,69 @@ class ZanaManualPayment
         if (!is_array($events)) {
             return [];
         }
+
+        $cache = [];
+        $events = array_map(function ($event) use (&$cache) {
+            if (!is_array($event)) {
+                return $event;
+            }
+
+            if (in_array((string) ($event['type'] ?? ''), [
+                'payment_instructions_template_required',
+                'payment_reminder_template_required',
+            'payment_link_template_required',
+            'paystack_link_template_required',
+            'paystack_callback_unmatched',
+        ], true)) {
+                $event['message_delivery_state'] = 'template_required_not_configured';
+                $event['message_delivery_label'] = self::deliveryStateLabel('template_required_not_configured');
+
+                return $event;
+            }
+
+            if (in_array((string) ($event['type'] ?? ''), [
+                'payment_instructions_copied',
+                'payment_reminder_copied',
+                'payment_link_copied',
+                'payment_mpesa_instructions_copied',
+                'paystack_link_copied',
+            ], true)) {
+                $event['message_delivery_state'] = 'copied_instead';
+                $event['message_delivery_label'] = self::deliveryStateLabel('copied_instead');
+
+                return $event;
+            }
+
+            $messageId = (int) ($event['message_id'] ?? 0);
+            if ($messageId > 0) {
+                if (!array_key_exists($messageId, $cache)) {
+                    $cache[$messageId] = Message::query()->find($messageId);
+                }
+                $msg = $cache[$messageId];
+                if ($msg) {
+                    $state = self::messageStateFromMessage($msg);
+                    $event['message_delivery_state'] = $state;
+                    $event['message_delivery_label'] = self::deliveryStateLabel($state);
+                    $event['message_sent_at'] = optional($msg->sent_at)?->toIso8601String();
+                    $event['message_delivered_at'] = optional($msg->delivered_at)?->toIso8601String();
+                    $event['message_read_at'] = optional($msg->read_at)?->toIso8601String();
+                    if (($event['wa_message_id'] ?? '') === '' && !empty($msg->meta['wa_message_id'])) {
+                        $event['wa_message_id'] = (string) $msg->meta['wa_message_id'];
+                    }
+                }
+            } elseif (($event['send_platform'] ?? '') === 'waba_template' && in_array((string) ($event['type'] ?? ''), [
+                'payment_instructions_template_sent',
+                'payment_reminder_template_sent',
+                'payment_link_template_sent',
+                'payment_mpesa_instructions_template_sent',
+                'paystack_link_template_sent',
+            ], true)) {
+                $event['message_delivery_state'] = 'submitted';
+                $event['message_delivery_label'] = self::deliveryStateLabel('submitted');
+            }
+
+            return $event;
+        }, $events);
 
         usort($events, static function ($a, $b) {
             $at = strtotime((string) ($a['at'] ?? '')) ?: 0;
@@ -152,6 +234,16 @@ class ZanaManualPayment
             if (array_key_exists($key, $attributes)) {
                 $payment[$key] = $attributes[$key];
             }
+        }
+
+        if (array_key_exists('daraja', $attributes) && is_array($attributes['daraja'])) {
+            $existingDaraja = is_array($payment['daraja'] ?? null) ? $payment['daraja'] : [];
+            $payment['daraja'] = array_merge($existingDaraja, $attributes['daraja']);
+        }
+
+        if (array_key_exists('paystack', $attributes) && is_array($attributes['paystack'])) {
+            $existingPaystack = is_array($payment['paystack'] ?? null) ? $payment['paystack'] : [];
+            $payment['paystack'] = array_merge($existingPaystack, $attributes['paystack']);
         }
 
         $payment['updated_at'] = now()->toIso8601String();
@@ -205,6 +297,16 @@ class ZanaManualPayment
                 'event' => 'payment_link_prepared',
                 'order_status' => 'pending',
             ],
+            'generate_paystack_link' => [
+                'status' => 'payment_link_sent',
+                'event' => 'paystack_link_generated',
+                'order_status' => 'pending',
+            ],
+            'generate_paystack_link_send' => [
+                'status' => 'payment_link_sent',
+                'event' => 'paystack_link_generated',
+                'order_status' => 'pending',
+            ],
             'customer_says_paid' => [
                 'status' => 'customer_says_paid',
                 'event' => 'customer_says_paid',
@@ -250,12 +352,35 @@ class ZanaManualPayment
             'payment_link_prepared' => 'Payment link prepared',
             'payment_link_sent' => 'Payment link sent',
             'payment_link_copied' => 'Payment link copied instead',
+            'paystack_link_generated' => 'Paystack link generated',
+            'paystack_link_sent' => 'Paystack link sent',
+            'paystack_link_copied' => 'Paystack link copied instead',
+            'paystack_link_generation_failed' => 'Paystack link generation failed',
+            'paystack_callback_received' => 'Paystack callback received',
+            'paystack_payment_confirmed' => 'Paystack payment confirmed',
+            'paystack_payment_failed' => 'Paystack payment failed',
+            'paystack_callback_unmatched' => 'Paystack callback unmatched',
+            'paystack_duplicate_callback_ignored' => 'Paystack duplicate callback ignored',
+            'payment_mpesa_instructions_sent' => 'M-Pesa instructions sent',
+            'payment_mpesa_instructions_copied' => 'M-Pesa instructions copied instead',
+            'payment_mpesa_instructions_template_sent' => 'M-Pesa instructions sent with approved template',
+            'payment_mpesa_instructions_template_failed' => 'Approved M-Pesa template failed',
+            'daraja_stk_initiated' => 'Daraja sandbox STK initiated',
+            'daraja_stk_initiation_failed' => 'Daraja sandbox STK initiation failed',
+            'daraja_callback_success' => 'Daraja sandbox callback success received',
+            'daraja_callback_failed' => 'Daraja sandbox callback failure received',
+            'payment_instructions_template_required' => 'Template required but not configured',
+            'payment_reminder_template_required' => 'Reminder template required but not configured',
+            'payment_link_template_required' => 'Payment-link template required but not configured',
+            'paystack_link_template_required' => 'Paystack-link template required but not configured',
             'payment_instructions_template_sent' => 'Payment instructions sent with approved template',
             'payment_instructions_template_failed' => 'Approved payment instructions template failed',
             'payment_reminder_template_sent' => 'Payment reminder sent with approved template',
             'payment_reminder_template_failed' => 'Approved payment reminder template failed',
             'payment_link_template_sent' => 'Payment link sent with approved template',
             'payment_link_template_failed' => 'Approved payment link template failed',
+            'paystack_link_template_sent' => 'Paystack link sent with approved template',
+            'paystack_link_template_failed' => 'Approved Paystack link template failed',
             'customer_says_paid' => 'Customer says paid',
             'reference_recorded' => 'Reference recorded',
             'payment_details_updated' => 'Payment details updated',
@@ -272,10 +397,59 @@ class ZanaManualPayment
             'paid_confirmed' => 'success',
             'payment_failed', 'refunded' => 'danger',
             'payment_instructions_sent', 'payment_reminder_sent', 'payment_link_sent',
-            'payment_instructions_template_sent', 'payment_reminder_template_sent', 'payment_link_template_sent' => 'info',
-            'payment_instructions_template_failed', 'payment_reminder_template_failed', 'payment_link_template_failed' => 'danger',
+            'payment_mpesa_instructions_sent', 'paystack_link_generated', 'paystack_link_sent',
+            'payment_instructions_template_sent', 'payment_reminder_template_sent', 'payment_link_template_sent',
+            'paystack_link_template_sent', 'paystack_callback_received' => 'info',
+            'payment_instructions_template_failed', 'payment_reminder_template_failed', 'payment_link_template_failed',
+            'paystack_link_generation_failed', 'paystack_link_template_failed', 'paystack_payment_failed', 'paystack_callback_unmatched' => 'danger',
+            'payment_mpesa_instructions_template_sent' => 'info',
+            'payment_mpesa_instructions_template_failed',
+            'daraja_stk_initiated', 'daraja_callback_success' => 'info',
+            'daraja_stk_initiation_failed', 'daraja_callback_failed',
+            'payment_instructions_template_required', 'payment_reminder_template_required', 'payment_link_template_required',
+            'paystack_link_template_required' => 'danger',
+            'paystack_payment_confirmed' => 'success',
             default => 'neutral',
         };
+    }
+
+    public static function deliveryStateLabel(?string $state): ?string
+    {
+        return match ((string) $state) {
+            'pending' => 'Queued',
+            'sent' => 'Sent',
+            'submitted' => 'Submitted',
+            'delivered' => 'Delivered',
+            'read' => 'Read',
+            'failed' => 'Failed',
+            'copied_instead' => 'Copied instead',
+            'template_required_not_configured' => 'Template required but not configured',
+            default => null,
+        };
+    }
+
+    private static function messageStateFromMessage(Message $message): string
+    {
+        if ($message->status === 'failed') {
+            return 'failed';
+        }
+        if ($message->read_at) {
+            return 'read';
+        }
+        if ($message->delivered_at) {
+            return 'delivered';
+        }
+        if ($message->status === 'read') {
+            return 'read';
+        }
+        if ($message->status === 'delivered') {
+            return 'delivered';
+        }
+        if ($message->status === 'sent') {
+            return 'sent';
+        }
+
+        return 'pending';
     }
 
     public static function parseAmount(?string $amount): ?string

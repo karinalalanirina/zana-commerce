@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\WaTemplate;
 use App\Models\WaStorefront;
+use App\Support\ZanaDarajaSandbox;
+use App\Support\ZanaPaystackMerchantLink;
+use App\Support\ZanaPaymentTemplateReadiness;
 use App\Support\ZanaStorefrontCurrency;
 use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Http\JsonResponse;
@@ -34,8 +37,11 @@ class WaStorefrontController extends Controller
             })
             ->orderBy('template_name')
             ->get(['id', 'template_name', 'language', 'meta_category', 'template_body']);
+        $paymentTemplateReadiness = ZanaPaymentTemplateReadiness::forStorefront($sf, $wsId);
+        $darajaReadiness = ZanaDarajaSandbox::readiness($sf);
+        $paystackReadiness = ZanaPaystackMerchantLink::readiness($sf);
 
-        return view('user.store.storefront.edit', compact('sf', 'themes', 'paymentFallbackTemplates'));
+        return view('user.store.storefront.edit', compact('sf', 'themes', 'paymentFallbackTemplates', 'paymentTemplateReadiness', 'darajaReadiness', 'paystackReadiness'));
     }
 
     public function update(Request $request): RedirectResponse
@@ -74,6 +80,21 @@ class WaStorefrontController extends Controller
             'external_payment_link' => ['nullable', 'url', 'max:1024'],
             'payment_instruction_template_id' => ['nullable', 'integer', 'min:1'],
             'payment_reminder_template_id' => ['nullable', 'integer', 'min:1'],
+            'paystack_enabled' => ['nullable', 'boolean'],
+            'paystack_public_key' => ['nullable', 'string', 'max:191'],
+            'paystack_secret_key' => ['nullable', 'string', 'max:191'],
+            'paystack_reference_prefix' => ['nullable', 'string', 'max:20'],
+            'paystack_fallback_customer_email' => ['nullable', 'email', 'max:191'],
+            'paystack_redirect_note' => ['nullable', 'string', 'max:160'],
+            'daraja_enabled' => ['nullable', 'boolean'],
+            'daraja_environment' => ['nullable', 'in:sandbox'],
+            'daraja_shortcode' => ['nullable', 'string', 'max:64'],
+            'daraja_consumer_key' => ['nullable', 'string', 'max:191'],
+            'daraja_consumer_secret' => ['nullable', 'string', 'max:191'],
+            'daraja_passkey' => ['nullable', 'string', 'max:191'],
+            'daraja_transaction_type' => ['nullable', 'in:CustomerPayBillOnline,CustomerBuyGoodsOnline'],
+            'daraja_callback_enabled' => ['nullable', 'boolean'],
+            'daraja_reference_prefix' => ['nullable', 'string', 'max:20'],
             // Razorpay API (auto payment links + webhook auto-confirm)
             'rzp_key_id'          => ['nullable', 'string', 'max:191'],
             'rzp_key_secret'      => ['nullable', 'string', 'max:191'],
@@ -103,6 +124,30 @@ class WaStorefrontController extends Controller
             'external_payment_link' => trim((string) ($data['external_payment_link'] ?? '')) ?: null,
             'payment_instruction_template_id' => !empty($data['payment_instruction_template_id']) ? (int) $data['payment_instruction_template_id'] : null,
             'payment_reminder_template_id' => !empty($data['payment_reminder_template_id']) ? (int) $data['payment_reminder_template_id'] : null,
+            'paystack_enabled' => (bool) ($data['paystack_enabled'] ?? false),
+            'paystack_public_key' => trim((string) ($data['paystack_public_key'] ?? '')) ?: null,
+            'paystack_secret_key' => !empty($data['paystack_secret_key'])
+                ? ZanaPaystackMerchantLink::encryptSecret($data['paystack_secret_key'])
+                : ($existing['paystack_secret_key'] ?? null),
+            'paystack_reference_prefix' => trim((string) ($data['paystack_reference_prefix'] ?? '')) ?: 'ZANA',
+            'paystack_fallback_customer_email' => trim((string) ($data['paystack_fallback_customer_email'] ?? '')) ?: null,
+            'paystack_redirect_note' => trim((string) ($data['paystack_redirect_note'] ?? '')) ?: null,
+            'daraja_enabled' => (bool) ($data['daraja_enabled'] ?? false),
+            'daraja_environment' => trim((string) ($data['daraja_environment'] ?? '')) ?: 'sandbox',
+            'daraja_shortcode' => trim((string) ($data['daraja_shortcode'] ?? '')) ?: null,
+            'daraja_transaction_type' => trim((string) ($data['daraja_transaction_type'] ?? '')) ?: 'CustomerPayBillOnline',
+            'daraja_callback_enabled' => (bool) ($data['daraja_callback_enabled'] ?? true),
+            'daraja_reference_prefix' => trim((string) ($data['daraja_reference_prefix'] ?? '')) ?: 'ORDER',
+            'daraja_callback_token' => ZanaDarajaSandbox::ensureCallbackToken($existing),
+            'daraja_consumer_key' => !empty($data['daraja_consumer_key'])
+                ? ZanaDarajaSandbox::encryptSecret($data['daraja_consumer_key'])
+                : ($existing['daraja_consumer_key'] ?? null),
+            'daraja_consumer_secret' => !empty($data['daraja_consumer_secret'])
+                ? ZanaDarajaSandbox::encryptSecret($data['daraja_consumer_secret'])
+                : ($existing['daraja_consumer_secret'] ?? null),
+            'daraja_passkey' => !empty($data['daraja_passkey'])
+                ? ZanaDarajaSandbox::encryptSecret($data['daraja_passkey'])
+                : ($existing['daraja_passkey'] ?? null),
         ], fn ($v) => $v !== null && $v !== '');
 
         if (($data['payment_provider'] ?? null) === 'razorpay_api') {

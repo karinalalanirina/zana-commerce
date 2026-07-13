@@ -333,6 +333,10 @@
                                     @endforeach
                                 </select>
                                 <span class="text-[10.5px] text-ink-500 mt-1 block">{{ __('Used only when freeform WhatsApp sending is blocked by the 24-hour rule. Best practice: use an approved utility template whose first body variable can carry the full payment message.') }}</span>
+                                <div class="mt-2 rounded-xl border border-paper-200 bg-paper-50 px-3 py-2 text-[11.5px] text-ink-600">
+                                    <div class="font-semibold text-ink-700">{{ __('Current state') }}: {{ $paymentTemplateReadiness['instruction']['label'] ?? __('Unknown') }}</div>
+                                    <div class="mt-1">{{ $paymentTemplateReadiness['instruction']['notes'] ?? '' }}</div>
+                                </div>
                             </label>
                             <label class="block">
                                 <span class="text-[11.5px] font-semibold text-ink-700">{{ __('24-hour fallback template for payment reminders') }}</span>
@@ -346,8 +350,167 @@
                                     @endforeach
                                 </select>
                                 <span class="text-[10.5px] text-ink-500 mt-1 block">{{ __('Use a reminder-safe approved template here if you want Zana to reopen the conversation compliantly instead of forcing operators to copy a reminder manually.') }}</span>
+                                <div class="mt-2 rounded-xl border border-paper-200 bg-paper-50 px-3 py-2 text-[11.5px] text-ink-600">
+                                    <div class="font-semibold text-ink-700">{{ __('Current state') }}: {{ $paymentTemplateReadiness['reminder']['label'] ?? __('Unknown') }}</div>
+                                    <div class="mt-1">{{ $paymentTemplateReadiness['reminder']['notes'] ?? '' }}</div>
+                                </div>
                             </label>
                         </div>
+
+                        <div class="mt-4 rounded-2xl border border-paper-200 bg-paper-50/60 p-4">
+                            <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-500">{{ __('Template guidance') }}</div>
+                            <div class="mt-1 text-[12px] text-ink-600">
+                                {{ $paymentTemplateReadiness['outside_24h_guidance'] ?? __('Outside the 24-hour window, payment sends may need an approved template or a manual copy fallback.') }}
+                            </div>
+                            <div class="mt-2 text-[11px] text-ink-500">
+                                {{ __('Current workspace send path') }}: {{ $paymentTemplateReadiness['engine_label'] ?? __('Unknown') }}
+                            </div>
+                        </div>
+
+                        @php
+                            $hasPaystackSecret = !empty($sf->payment_config_json['paystack_secret_key']);
+                        @endphp
+                        <div class="mt-4 border border-paper-200 rounded-xl p-4 bg-paper-50/50">
+                            <div class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-500">{{ __('Paystack order links') }}</div>
+                            <div class="mt-1 text-[12px] text-ink-600">{{ __('Optional Africa-facing order-specific Paystack checkout links. Zana generates the link per order, then operators send it through the existing WhatsApp or copy fallback flow.') }}</div>
+                            <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <label class="inline-flex items-start gap-2 text-[12.5px] sm:col-span-2">
+                                    <input type="hidden" name="paystack_enabled" value="0" />
+                                    <input type="checkbox" name="paystack_enabled" value="1" @checked(old('paystack_enabled', $pay['paystack_enabled'] ?? false)) class="mt-0.5 rounded border-paper-200 text-wa-deep" />
+                                    <span>
+                                        <span class="font-semibold block">{{ __('Enable Paystack link generation for this merchant') }}</span>
+                                        <span class="text-[10.5px] text-ink-500">{{ __('Keeps M-Pesa/manual and Daraja flows intact. This only adds a Paystack order-link option on the order page.') }}</span>
+                                    </span>
+                                </label>
+                                <label class="block">
+                                    <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Paystack public key') }}</span>
+                                    <input type="text" name="paystack_public_key" maxlength="191"
+                                        value="{{ old('paystack_public_key', $pay['paystack_public_key'] ?? '') }}"
+                                        placeholder="pk_live_or_test_..."
+                                        class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[12.5px] font-mono focus:outline-none focus:border-wa-deep" />
+                                </label>
+                                <label class="block">
+                                    <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Paystack secret key') }}</span>
+                                    <input type="password" name="paystack_secret_key" maxlength="191" autocomplete="new-password"
+                                        placeholder="{{ $hasPaystackSecret ? __('saved — leave blank to keep') : __('sk_live_or_test_...') }}"
+                                        class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[12.5px] font-mono focus:outline-none focus:border-wa-deep" />
+                                </label>
+                                <label class="block">
+                                    <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Reference prefix') }}</span>
+                                    <input type="text" name="paystack_reference_prefix" maxlength="20"
+                                        value="{{ old('paystack_reference_prefix', $pay['paystack_reference_prefix'] ?? 'ZANA') }}"
+                                        placeholder="ZANA"
+                                        class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[12.5px] font-mono focus:outline-none focus:border-wa-deep" />
+                                </label>
+                                <label class="block">
+                                    <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Fallback customer email') }}</span>
+                                    <input type="email" name="paystack_fallback_customer_email" maxlength="191"
+                                        value="{{ old('paystack_fallback_customer_email', $pay['paystack_fallback_customer_email'] ?? '') }}"
+                                        placeholder="payments@yourstore.com"
+                                        class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[12.5px] focus:outline-none focus:border-wa-deep" />
+                                </label>
+                                <label class="block sm:col-span-2">
+                                    <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Redirect note') }}</span>
+                                    <input type="text" name="paystack_redirect_note" maxlength="160"
+                                        value="{{ old('paystack_redirect_note', $pay['paystack_redirect_note'] ?? '') }}"
+                                        placeholder="{{ __('Customer returns to the order status page after checkout') }}"
+                                        class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[12.5px] focus:outline-none focus:border-wa-deep" />
+                                </label>
+                            </div>
+                            <div class="mt-3 rounded-xl border border-paper-200 bg-paper-0 px-3 py-3 text-[11.5px] text-ink-600">
+                                <div class="font-semibold text-ink-700">{{ __('Current state') }}: {{ $paystackReadiness['label'] ?? __('Unknown') }}</div>
+                                <div class="mt-1">{{ $paystackReadiness['notes'] ?? '' }}</div>
+                            </div>
+                        </div>
+
+                        @if (config('zana.enable_daraja_sandbox'))
+                            @php
+                                $hasDarajaKey = !empty($sf->payment_config_json['daraja_consumer_key']);
+                                $hasDarajaSecret = !empty($sf->payment_config_json['daraja_consumer_secret']);
+                                $hasDarajaPasskey = !empty($sf->payment_config_json['daraja_passkey']);
+                            @endphp
+                            <div class="mt-4 border border-paper-200 rounded-xl p-4 bg-paper-50/50">
+                                <div class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-500">{{ __('Daraja sandbox (staging only)') }}</div>
+                                <div class="mt-1 text-[12px] text-ink-600">{{ __('This scaffold is for staging validation only: STK initiation, callback receipt, order linkage, and duplicate handling. It is not a production rollout yet.') }}</div>
+                                <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <label class="inline-flex items-start gap-2 text-[12.5px] sm:col-span-2">
+                                        <input type="hidden" name="daraja_enabled" value="0" />
+                                        <input type="checkbox" name="daraja_enabled" value="1" @checked(old('daraja_enabled', $pay['daraja_enabled'] ?? false)) class="mt-0.5 rounded border-paper-200 text-wa-deep" />
+                                        <span>
+                                            <span class="font-semibold block">{{ __('Enable Daraja sandbox for this merchant') }}</span>
+                                            <span class="text-[10.5px] text-ink-500">{{ __('Keep this off outside staging/testing until sandbox validation succeeds.') }}</span>
+                                        </span>
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Environment') }}</span>
+                                        <select name="daraja_environment" class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] focus:outline-none focus:border-wa-deep">
+                                            <option value="sandbox" @selected(old('daraja_environment', $pay['daraja_environment'] ?? 'sandbox') === 'sandbox')>{{ __('Sandbox') }}</option>
+                                        </select>
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Business short code') }}</span>
+                                        <input type="text" name="daraja_shortcode" maxlength="64"
+                                            value="{{ old('daraja_shortcode', $pay['daraja_shortcode'] ?? '') }}"
+                                            placeholder="174379"
+                                            class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] font-mono focus:outline-none focus:border-wa-deep" />
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Consumer key') }}</span>
+                                        <input type="password" name="daraja_consumer_key" autocomplete="new-password"
+                                            placeholder="{{ $hasDarajaKey ? __('saved — leave blank to keep') : __('sandbox consumer key') }}"
+                                            class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[12.5px] font-mono focus:outline-none focus:border-wa-deep" />
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Consumer secret') }}</span>
+                                        <input type="password" name="daraja_consumer_secret" autocomplete="new-password"
+                                            placeholder="{{ $hasDarajaSecret ? __('saved — leave blank to keep') : __('sandbox consumer secret') }}"
+                                            class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[12.5px] font-mono focus:outline-none focus:border-wa-deep" />
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Passkey') }}</span>
+                                        <input type="password" name="daraja_passkey" autocomplete="new-password"
+                                            placeholder="{{ $hasDarajaPasskey ? __('saved — leave blank to keep') : __('sandbox passkey') }}"
+                                            class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[12.5px] font-mono focus:outline-none focus:border-wa-deep" />
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Transaction type') }}</span>
+                                        <select name="daraja_transaction_type" class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] focus:outline-none focus:border-wa-deep">
+                                            <option value="CustomerPayBillOnline" @selected(old('daraja_transaction_type', $pay['daraja_transaction_type'] ?? 'CustomerPayBillOnline') === 'CustomerPayBillOnline')>{{ __('CustomerPayBillOnline') }}</option>
+                                            <option value="CustomerBuyGoodsOnline" @selected(old('daraja_transaction_type', $pay['daraja_transaction_type'] ?? '') === 'CustomerBuyGoodsOnline')>{{ __('CustomerBuyGoodsOnline') }}</option>
+                                        </select>
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-[11.5px] font-semibold text-ink-700">{{ __('Reference prefix') }}</span>
+                                        <input type="text" name="daraja_reference_prefix" maxlength="20"
+                                            value="{{ old('daraja_reference_prefix', $pay['daraja_reference_prefix'] ?? 'ORDER') }}"
+                                            placeholder="ORDER"
+                                            class="mt-1 w-full px-3 py-2 border border-paper-200 rounded-lg text-[13px] font-mono focus:outline-none focus:border-wa-deep" />
+                                    </label>
+                                    <label class="inline-flex items-start gap-2 text-[12.5px] sm:col-span-2">
+                                        <input type="hidden" name="daraja_callback_enabled" value="0" />
+                                        <input type="checkbox" name="daraja_callback_enabled" value="1" @checked(old('daraja_callback_enabled', $pay['daraja_callback_enabled'] ?? true)) class="mt-0.5 rounded border-paper-200 text-wa-deep" />
+                                        <span>
+                                            <span class="font-semibold block">{{ __('Receive sandbox callbacks') }}</span>
+                                            <span class="text-[10.5px] text-ink-500">{{ __('Enable this only when your staging URL or tunnel is publicly reachable over HTTPS.') }}</span>
+                                        </span>
+                                    </label>
+                                </div>
+                                <div class="mt-3 rounded-xl border border-paper-200 bg-paper-0 px-3 py-3 text-[11.5px] text-ink-600">
+                                    <div class="font-semibold text-ink-700">{{ __('Current state') }}: {{ $darajaReadiness['label'] ?? __('Unknown') }}</div>
+                                    <div class="mt-1">{{ $darajaReadiness['notes'] ?? '' }}</div>
+                                    <div class="mt-2 text-[11px] text-ink-500">{{ $darajaReadiness['phone_guidance'] ?? '' }}</div>
+                                    @if (!empty($darajaReadiness['callback_url']))
+                                        <div class="mt-2 text-[11px] text-ink-500">{{ __('Sandbox callback URL') }}: <code class="font-mono">{{ $darajaReadiness['callback_url'] }}</code></div>
+                                    @endif
+                                </div>
+                            </div>
+                        @else
+                            <div class="mt-4 border border-paper-200 rounded-xl p-4 bg-paper-50/50">
+                                <div class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-500">{{ __('Daraja STK testing') }}</div>
+                                <div class="mt-1 text-[12px] text-ink-600">{{ __('This staging-only Daraja section is currently hidden because the global Zana Daraja sandbox feature flag is off.') }}</div>
+                                <div class="mt-2 text-[11px] text-ink-500">{{ __('Enable ZANA_ENABLE_DARAJA_SANDBOX=true, clear config cache, then return here to configure shortcode, credentials, callback behavior, and STK settings safely.') }}</div>
+                            </div>
+                        @endif
 
                         {{-- Razorpay API keys — only used when provider = "Razorpay (auto-generate)".
  Lets the store mint a real payment link per order + auto-mark paid via webhook.

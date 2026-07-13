@@ -5,37 +5,125 @@ namespace App\Http\Controllers;
 use App\Models\Message;
 use App\Models\WaOrder;
 use App\Support\ZanaAfricaPayments;
+use App\Support\ZanaDarajaSandbox;
+use App\Support\ZanaKenyaPaymentShortcut;
 use App\Support\ZanaManualPayment;
+use App\Support\ZanaPaystackMerchantLink;
 use App\Support\ZanaPaymentTemplateFallback;
+use App\Support\ZanaPaymentVerification;
+use App\Support\ZanaWeeklyPaymentReport;
 use App\Services\WhatsAppDispatcher;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class WaOrderController extends Controller
 {
     public function __construct(private readonly WhatsAppDispatcher $dispatcher) {}
 
-    public function index(Request $request): View
+    public function index(Request $request): View|StreamedResponse
     {
         $wsId = Auth::user()->current_workspace_id;
         $status = $request->string('status')->toString() ?: 'all';
         $source = $request->string('source')->toString() ?: 'all';
         $paymentState = $request->string('payment_state')->toString() ?: 'all';
-        $q      = trim((string) $request->string('q')->toString());
+        $verificationState = $request->string('verification_state')->toString() ?: ZanaPaymentVerification::FILTER_ALL;
+        $reportDays = max(7, min(30, (int) $request->integer('report_days', 7)));
+        $export = $request->string('export')->toString() === 'csv';
+        $q = trim((string) $request->string('q')->toString());
 
-        $rows = WaOrder::forWorkspace($wsId)
+        $baseQuery = WaOrder::forWorkspace($wsId)
             ->when($status !== 'all', fn ($qq) => $qq->where('status', $status))
             ->when($source !== 'all', fn ($qq) => $qq->where('source', $source))
             ->when($paymentState !== 'all', fn ($qq) => $qq->where('meta_json->' . ZanaManualPayment::PAYMENT_KEY . '->status', $paymentState))
-            ->when($q !== '', fn ($qq) => $qq->where(function ($w) use ($q) {
-                $w->where('customer_phone', 'like', "%{$q}%")
-                  ->orWhere('customer_name', 'like', "%{$q}%")
-                  ->orWhere('meta_json->' . ZanaManualPayment::PAYMENT_KEY . '->transaction_reference', 'like', "%{$q}%");
-            }))
-            ->orderByDesc('created_at')->paginate(25)->withQueryString();
+            ->orderByDesc('created_at');
+
+        $filteredOrders = $baseQuery->get();
+        if ($q !== '') {
+            $filteredOrders = $filteredOrders->filter(
+                fn (WaOrder $order) => ZanaPaymentVerification::matchesSearch($order, $q)
+            )->values();
+        }
+        if ($verificationState !== ZanaPaymentVerification::FILTER_ALL) {
+            $filteredOrders = $filteredOrders->filter(
+                fn (WaOrder $order) => ZanaPaymentVerification::matchesFilter($order, $verificationState)
+            )->values();
+        }
+
+        if ($export) {
+            return response()->streamDownload(function () use ($filteredOrders) {
+                $out = fopen('php://output', 'w');
+                fputcsv($out, [
+                    'order_id',
+                    'order_reference',
+                    'customer_name',
+                    'customer_phone',
+                    'order_status',
+                    'payment_state',
+                    'verification_state',
+                    'payment_method',
+                    'amount_due',
+                    'amount_received',
+                    'payment_reference',
+                    'paystack_status',
+                    'paystack_reference',
+                    'paystack_callback_received_at',
+                    'daraja_status',
+                    'daraja_checkout_request_id',
+                    'daraja_merchant_request_id',
+                    'daraja_callback_received_at',
+                    'payer_note',
+                    'confirmed_at',
+                    'updated_at',
+                ]);
+
+                foreach ($filteredOrders as $order) {
+                    $paymentMeta = ZanaManualPayment::paymentMeta($order);
+                    $paystack = ZanaManualPayment::paystackMeta($order);
+                    $daraja = ZanaManualPayment::darajaMeta($order);
+                    fputcsv($out, [
+                        $order->id,
+                        'ORDER-' . $order->id,
+                        $order->customer_name,
+                        $order->customer_phone,
+                        $order->status,
+                        ZanaManualPayment::statusLabel(ZanaManualPayment::paymentStatus($order)),
+                        ZanaPaymentVerification::derivedLabel($order),
+                        ZanaManualPayment::methodLabel($paymentMeta['payment_method'] ?? null),
+                        strip_tags((string) $order->total_display),
+                        ZanaManualPayment::amountReceivedDisplay($order) ?: '',
+                        $paymentMeta['transaction_reference'] ?? '',
+                        $paystack['status'] ?? '',
+                        $paystack['reference'] ?? '',
+                        ZanaManualPayment::displayAt($paystack['callback_received_at'] ?? null) ?: '',
+                        $daraja['status'] ?? '',
+                        $daraja['checkout_request_id'] ?? '',
+                        $daraja['merchant_request_id'] ?? '',
+                        ZanaManualPayment::displayAt($daraja['callback_received_at'] ?? null) ?: '',
+                        $paymentMeta['payer_note'] ?? '',
+                        ZanaManualPayment::displayAt($paymentMeta['confirmed_at'] ?? null) ?: '',
+                        optional($order->updated_at)->format('Y-m-d H:i:s'),
+                    ]);
+                }
+
+                fclose($out);
+            }, 'zana-payment-orders.csv', [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+            ]);
+        }
+
+        $page = max(1, (int) $request->integer('page', 1));
+        $perPage = 25;
+        $rows = new \Illuminate\Pagination\LengthAwarePaginator(
+            $filteredOrders->forPage($page, $perPage)->values(),
+            $filteredOrders->count(),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
 
         // One grouped query instead of N per-status counts — also picks up the
         // natural-language-ordering statuses (pending / processing / completed).
@@ -46,7 +134,7 @@ class WaOrderController extends Controller
             $counts[$st] = (int) ($byStatus[$st] ?? 0);
         }
 
-        $paymentOrders = WaOrder::forWorkspace($wsId)->get(['id', 'status', 'meta_json', 'total_minor', 'currency_code']);
+        $paymentOrders = WaOrder::forWorkspace($wsId)->get(['id', 'status', 'meta_json', 'total_minor', 'currency_code', 'updated_at', 'customer_phone', 'customer_name']);
         $paymentCounts = ['all' => $paymentOrders->count()];
         foreach (ZanaManualPayment::STATUSES as $state) {
             $paymentCounts[$state] = $paymentOrders->filter(
@@ -74,7 +162,21 @@ class WaOrderController extends Controller
             })->count(),
         ];
 
-        return view('user.store.orders.index', compact('rows', 'counts', 'status', 'source', 'q', 'paymentState', 'paymentCounts', 'reportingSummary'));
+        $weeklySummary = ZanaWeeklyPaymentReport::build($paymentOrders, $reportDays);
+
+        return view('user.store.orders.index', compact(
+            'rows',
+            'counts',
+            'status',
+            'source',
+            'q',
+            'paymentState',
+            'paymentCounts',
+            'reportingSummary',
+            'verificationState',
+            'reportDays',
+            'weeklySummary'
+        ));
     }
 
     public function show(int $id): View
@@ -92,7 +194,7 @@ class WaOrderController extends Controller
             'status' => 'required|in:' . implode(',', WaOrder::STATUSES),
             'notes'  => 'nullable|string|max:1000',
             'payment_link' => 'nullable|url|max:1024',
-            'payment_action' => 'nullable|in:send_instructions,send_reminder,customer_says_paid,paid_confirmed,payment_failed,resend_link,refunded',
+            'payment_action' => 'nullable|in:send_instructions,send_mpesa_instructions,send_daraja_stk,generate_paystack_link,generate_paystack_link_send,send_reminder,customer_says_paid,paid_confirmed,payment_failed,resend_link,refunded',
             'zana_payment_status' => 'nullable|in:' . implode(',', ZanaManualPayment::STATUSES),
             'zana_payment_method' => 'nullable|in:' . implode(',', ZanaManualPayment::METHODS),
             'zana_payment_reference' => 'nullable|string|max:120',
@@ -128,7 +230,7 @@ class WaOrderController extends Controller
         }
 
         $eventType = null;
-        if (!in_array($paymentAction, ['send_instructions', 'send_reminder', 'resend_link'], true)) {
+        if (!in_array($paymentAction, ['send_instructions', 'send_mpesa_instructions', 'send_daraja_stk', 'generate_paystack_link', 'generate_paystack_link_send', 'send_reminder', 'resend_link'], true)) {
             $eventType = (string) ($paymentActionState['event'] ?? '');
         }
         if ($eventType === '' && $paymentAttributes['transaction_reference'] !== '' && $paymentAttributes['transaction_reference'] !== (string) (ZanaManualPayment::paymentMeta($order)['transaction_reference'] ?? '')) {
@@ -148,7 +250,18 @@ class WaOrderController extends Controller
         $order->save();
 
         $copyPayload = null;
-        if (in_array($paymentAction, ['send_instructions', 'send_reminder', 'resend_link'], true)) {
+        if ($paymentAction === 'generate_paystack_link_send') {
+            $paystackOutcome = $this->handlePaystackLinkAction($order, $actor, $paymentAction);
+            if (!empty($paystackOutcome['meta'])) {
+                $order->meta_json = $paystackOutcome['meta'];
+                $order->save();
+            }
+            if (!empty($paystackOutcome['payment_link'])) {
+                $order->payment_link = $paystackOutcome['payment_link'];
+                $order->save();
+            }
+            $copyPayload = $paystackOutcome['copy'] ?? null;
+        } elseif (in_array($paymentAction, ['send_instructions', 'send_mpesa_instructions', 'send_reminder', 'resend_link'], true)) {
             $sendOutcome = $this->sendPaymentWorkflowMessage($order, $paymentAction, $actor, $newLink);
             if (!empty($sendOutcome['meta'])) {
                 $order->meta_json = $sendOutcome['meta'];
@@ -157,6 +270,24 @@ class WaOrderController extends Controller
             if (!empty($sendOutcome['copy'])) {
                 $copyPayload = $sendOutcome['copy'];
             }
+        } elseif ($paymentAction === 'generate_paystack_link') {
+            $paystackOutcome = $this->handlePaystackLinkAction($order, $actor, $paymentAction);
+            if (!empty($paystackOutcome['meta'])) {
+                $order->meta_json = $paystackOutcome['meta'];
+                $order->save();
+            }
+            if (!empty($paystackOutcome['payment_link'])) {
+                $order->payment_link = $paystackOutcome['payment_link'];
+                $order->save();
+            }
+            $copyPayload = $paystackOutcome['copy'] ?? null;
+        } elseif ($paymentAction === 'send_daraja_stk') {
+            $stkOutcome = $this->sendDarajaSandboxStk($order, $actor);
+            if (!empty($stkOutcome['meta'])) {
+                $order->meta_json = $stkOutcome['meta'];
+                $order->save();
+            }
+            $copyPayload = $stkOutcome['copy'] ?? null;
         } else {
             // DM the BUYER directly for explicit state changes after the
             // payment metadata is saved so the customer sees the latest status.
@@ -254,6 +385,10 @@ class WaOrderController extends Controller
         $msg->status = $nativeOk ? 'sent' : 'failed';
         $msg->failure_reason = $result['error'] ?? null;
         $msg->sent_at = $msg->status === 'sent' ? now() : null;
+        if (!empty($result['provider_id'])) {
+            $existingMeta = is_array($msg->meta) ? $msg->meta : [];
+            $msg->meta = array_merge($existingMeta, ['wa_message_id' => (string) $result['provider_id']]);
+        }
         $msg->save();
 
         $actor = Auth::user();
@@ -329,6 +464,10 @@ class WaOrderController extends Controller
         $msg->status = ($result['ok'] ?? false) ? 'sent' : 'failed';
         $msg->failure_reason = $result['error'] ?? null;
         $msg->sent_at = $msg->status === 'sent' ? now() : null;
+        if (!empty($result['provider_id'])) {
+            $existingMeta = is_array($msg->meta) ? $msg->meta : [];
+            $msg->meta = array_merge($existingMeta, ['wa_message_id' => (string) $result['provider_id']]);
+        }
         $msg->save();
 
         return response()->json(['ok' => true, 'url' => $link['url'], 'sent' => $msg->status === 'sent']);
@@ -339,6 +478,145 @@ class WaOrderController extends Controller
         $wsId = Auth::user()->current_workspace_id;
         WaOrder::forWorkspace($wsId)->findOrFail($id)->delete();
         return redirect()->route('user.store.orders.index')->with('status', 'Order removed.');
+    }
+
+    private function handlePaystackLinkAction(WaOrder $order, $actor, string $paymentAction): array
+    {
+        $storefront = $order->storefront()->first();
+        $result = $storefront
+            ? ZanaPaystackMerchantLink::initializeForOrder($storefront, $order)
+            : ['ok' => false, 'error' => 'No storefront is connected to this order yet.'];
+
+        if (!($result['ok'] ?? false)) {
+            $error = (string) ($result['error'] ?? 'Paystack link generation failed.');
+            $meta = ZanaManualPayment::mergeIntoOrder($order, [
+                'payment_method' => 'payment_link',
+                'last_send_channel' => 'copy',
+                'last_send_result' => 'generation_failed',
+                'last_send_error' => $error,
+                'paystack' => [
+                    'status' => 'generation_failed',
+                    'last_error' => $error,
+                    'attempted_at' => now()->toIso8601String(),
+                ],
+            ], $actor, 'paystack_link_generation_failed', [
+                'provider' => 'paystack',
+                'send_error' => $error,
+            ]);
+
+            return [
+                'meta' => $meta,
+                'copy' => [
+                    'label' => null,
+                    'text' => null,
+                    'status' => $error,
+                ],
+            ];
+        }
+
+        $link = (string) ($result['url'] ?? '');
+        $meta = ZanaManualPayment::mergeIntoOrder($order, [
+            'status' => 'payment_link_sent',
+            'payment_method' => 'payment_link',
+            'last_payment_link' => $link,
+            'paystack' => [
+                'status' => 'link_generated',
+                'provider' => 'paystack',
+                'reference' => $result['reference'] ?? null,
+                'access_code' => $result['access_code'] ?? null,
+                'currency' => $result['currency'] ?? null,
+                'amount_minor' => $result['amount_minor'] ?? null,
+                'email_used' => $result['email_used'] ?? null,
+                'redirect_url' => $result['redirect_url'] ?? null,
+                'generated_at' => now()->toIso8601String(),
+            ],
+        ], $actor, 'paystack_link_generated', [
+            'provider' => 'paystack',
+            'payment_link' => $link,
+            'transaction_reference' => $result['reference'] ?? null,
+        ]);
+
+        if ($paymentAction === 'generate_paystack_link_send') {
+            $order->payment_link = $link;
+            $order->meta_json = $meta;
+            $sendOutcome = $this->sendPaymentWorkflowMessage($order, 'generate_paystack_link_send', $actor, $link);
+
+            return [
+                'payment_link' => $link,
+                'meta' => $sendOutcome['meta'] ?? $meta,
+                'copy' => $sendOutcome['copy'] ?? null,
+            ];
+        }
+
+        return [
+            'payment_link' => $link,
+            'meta' => $meta,
+            'copy' => [
+                'label' => 'Copy Paystack payment link',
+                'text' => $link,
+                'status' => 'Paystack link generated. Copy or send it from this order.',
+            ],
+        ];
+    }
+
+    private function sendDarajaSandboxStk(WaOrder $order, $actor): array
+    {
+        $storefront = $order->storefront()->first();
+        $result = ZanaDarajaSandbox::initiateForOrder($storefront, $order);
+
+        if (!($result['ok'] ?? false)) {
+            $error = (string) ($result['error'] ?? 'Daraja sandbox STK initiation failed.');
+            $meta = ZanaManualPayment::mergeIntoOrder($order, [
+                'payment_method' => 'daraja_stk',
+                'daraja' => [
+                    'status' => 'initiation_failed',
+                    'last_error' => $error,
+                    'request_attempted_at' => now()->toIso8601String(),
+                ],
+            ], $actor, 'daraja_stk_initiation_failed', [
+                'send_error' => $error,
+            ]);
+
+            return [
+                'meta' => $meta,
+                'copy' => [
+                    'label' => null,
+                    'text' => null,
+                    'status' => $error . ' Manual M-Pesa instructions are still available for this order.',
+                ],
+            ];
+        }
+
+        $meta = ZanaManualPayment::mergeIntoOrder($order, [
+            'status' => 'awaiting_payment',
+            'payment_method' => 'daraja_stk',
+            'daraja' => [
+                'status' => 'initiated',
+                'environment' => 'sandbox',
+                'merchant_request_id' => $result['merchant_request_id'] ?? null,
+                'checkout_request_id' => $result['checkout_request_id'] ?? null,
+                'request_phone' => $result['request_phone'] ?? null,
+                'request_amount' => $result['request_amount'] ?? null,
+                'request_reference' => $result['request_reference'] ?? null,
+                'request_attempted_at' => now()->toIso8601String(),
+                'response_code' => $result['response_code'] ?? null,
+                'response_description' => $result['response_description'] ?? null,
+                'customer_message' => $result['customer_message'] ?? null,
+                'callback_url' => $result['callback_url'] ?? null,
+            ],
+        ], $actor, 'daraja_stk_initiated', [
+            'merchant_request_id' => $result['merchant_request_id'] ?? null,
+            'checkout_request_id' => $result['checkout_request_id'] ?? null,
+        ]);
+
+        return [
+            'meta' => $meta,
+            'copy' => [
+                'label' => null,
+                'text' => null,
+                'status' => 'Daraja sandbox STK push initiated. Wait for the callback or continue with manual confirmation if needed.',
+            ],
+        ];
     }
 
     private function sendPaymentWorkflowMessage(WaOrder $order, string $paymentAction, $actor, string $paymentLink = ''): array
@@ -357,8 +635,10 @@ class WaOrderController extends Controller
 
         $eventMap = [
             'send_instructions' => ['success' => 'payment_instructions_sent', 'fallback' => 'payment_instructions_copied', 'template_success' => 'payment_instructions_template_sent', 'template_failed' => 'payment_instructions_template_failed'],
+            'send_mpesa_instructions' => ['success' => 'payment_mpesa_instructions_sent', 'fallback' => 'payment_mpesa_instructions_copied', 'template_success' => 'payment_mpesa_instructions_template_sent', 'template_failed' => 'payment_mpesa_instructions_template_failed'],
             'send_reminder' => ['success' => 'payment_reminder_sent', 'fallback' => 'payment_reminder_copied', 'template_success' => 'payment_reminder_template_sent', 'template_failed' => 'payment_reminder_template_failed'],
             'resend_link' => ['success' => 'payment_link_sent', 'fallback' => 'payment_link_copied', 'template_success' => 'payment_link_template_sent', 'template_failed' => 'payment_link_template_failed'],
+            'generate_paystack_link_send' => ['success' => 'paystack_link_sent', 'fallback' => 'paystack_link_copied', 'template_success' => 'paystack_link_template_sent', 'template_failed' => 'paystack_link_template_failed'],
         ];
         $eventType = $eventMap[$paymentAction] ?? ['success' => 'payment_details_updated', 'fallback' => 'payment_details_updated'];
         $phone = trim((string) $order->customer_phone);
@@ -404,15 +684,28 @@ class WaOrderController extends Controller
         $msg->status = $nativeOk ? 'sent' : 'failed';
         $msg->failure_reason = $nativeOk ? null : (($result['error'] ?? null) ?: (($result['local_only'] ?? false) ? 'Native send unavailable in this workspace.' : null));
         $msg->sent_at = $nativeOk ? now() : null;
+        if (!empty($result['provider_id'])) {
+            $existingMeta = is_array($msg->meta) ? $msg->meta : [];
+            $msg->meta = array_merge($existingMeta, ['wa_message_id' => (string) $result['provider_id']]);
+        }
         $msg->save();
 
         if (!$nativeOk && ZanaPaymentTemplateFallback::shouldUseTemplateFallback($result)) {
             $templateResult = ZanaPaymentTemplateFallback::sendForOrder($order, $paymentAction, $body, $paymentLink);
             $templateOk = (bool) ($templateResult['ok'] ?? false);
+            if ($templateOk && !empty($templateResult['wamid'])) {
+                $existingMeta = is_array($msg->meta) ? $msg->meta : [];
+                $msg->meta = array_merge($existingMeta, ['wa_message_id' => (string) $templateResult['wamid']]);
+                $msg->status = 'sent';
+                $msg->failure_reason = null;
+                $msg->sent_at = $msg->sent_at ?: now();
+                $msg->save();
+            }
             $templateMeta = ZanaManualPayment::mergeIntoOrder($order, [
                 'status' => match ($paymentAction) {
                     'send_reminder' => 'payment_reminder_sent',
                     'resend_link' => 'payment_link_sent',
+                    'generate_paystack_link_send' => 'payment_link_sent',
                     default => 'awaiting_payment',
                 },
                 'last_send_channel' => $templateOk ? 'waba_template' : 'copy',
@@ -443,8 +736,46 @@ class WaOrderController extends Controller
                         'status' => match ($paymentAction) {
                             'send_reminder' => 'Payment reminder sent with an approved WhatsApp template because the 24-hour window was closed.',
                             'resend_link' => 'Payment link sent with an approved WhatsApp template because the 24-hour window was closed.',
+                            'generate_paystack_link_send' => 'Paystack link sent with an approved WhatsApp template because the 24-hour window was closed.',
                             default => 'Payment instructions sent with an approved WhatsApp template because the 24-hour window was closed.',
                         },
+                    ],
+                ];
+            }
+
+            if (($templateResult['reason'] ?? '') === 'not_configured') {
+                $requiredEvent = match ($paymentAction) {
+                    'send_reminder' => 'payment_reminder_template_required',
+                    'resend_link' => 'payment_link_template_required',
+                    'generate_paystack_link_send' => 'paystack_link_template_required',
+                    default => 'payment_instructions_template_required',
+                };
+                if ($paymentAction === 'send_mpesa_instructions') {
+                    $requiredEvent = 'payment_instructions_template_required';
+                }
+                $meta = ZanaManualPayment::mergeIntoOrder($order, [
+                    'last_send_channel' => 'copy',
+                    'last_send_result' => 'template_required_not_configured',
+                    'last_send_error' => $templateResult['error'] ?? 'Template required but not configured.',
+                    'last_payment_message' => $body,
+                    'last_payment_message_at' => now()->toIso8601String(),
+                    'last_payment_message_type' => $messageType,
+                ], $actor, $requiredEvent, [
+                    'message_id' => $msg->id,
+                    'send_error' => $templateResult['error'] ?? null,
+                    'fallback_reason' => '24h_window',
+                ]);
+
+                return [
+                    'meta' => $meta,
+                    'copy' => [
+                        'label' => match ($paymentAction) {
+                            'send_reminder' => 'Copy payment reminder',
+                            'generate_paystack_link_send' => 'Copy Paystack payment link message',
+                            default => 'Copy payment instructions',
+                        },
+                        'text' => $body,
+                        'status' => 'Template required but not configured. Copy the payment message below instead.',
                     ],
                 ];
             }
@@ -454,10 +785,11 @@ class WaOrderController extends Controller
             'status' => match ($paymentAction) {
                 'send_reminder' => 'payment_reminder_sent',
                 'resend_link' => 'payment_link_sent',
+                'generate_paystack_link_send' => 'payment_link_sent',
                 default => 'awaiting_payment',
             },
             'last_send_channel' => $nativeOk ? 'whatsapp' : 'copy',
-            'last_send_result' => $nativeOk ? 'sent' : 'fallback_copy',
+            'last_send_result' => $nativeOk ? 'sent' : ((ZanaPaymentTemplateFallback::shouldUseTemplateFallback($result) && ZanaPaymentTemplateFallback::requiresTemplateButIsNotConfigured($order, $paymentAction)) ? 'template_required_not_configured' : 'fallback_copy'),
             'last_send_error' => $nativeOk ? null : ($result['error'] ?? (($result['local_only'] ?? false) ? 'Native send unavailable in this workspace.' : 'Send failed')),
             'last_payment_message' => $body,
             'last_payment_message_at' => now()->toIso8601String(),
@@ -478,6 +810,7 @@ class WaOrderController extends Controller
                     'status' => match ($paymentAction) {
                         'send_reminder' => 'Payment reminder sent on WhatsApp.',
                         'resend_link' => 'Payment link sent on WhatsApp.',
+                        'generate_paystack_link_send' => 'Paystack link sent on WhatsApp.',
                         default => 'Payment instructions sent on WhatsApp.',
                     },
                 ],
@@ -494,12 +827,16 @@ class WaOrderController extends Controller
                 'label' => match ($paymentAction) {
                     'send_reminder' => 'Copy payment reminder',
                     'resend_link' => 'Copy payment link message',
+                    'generate_paystack_link_send' => 'Copy Paystack payment link message',
+                    'send_mpesa_instructions' => 'Copy M-Pesa instructions',
                     default => 'Copy payment instructions',
                 },
                 'text' => $body,
                 'status' => match ($paymentAction) {
                     'send_reminder' => $fallbackReason . ' Copy the payment reminder below instead.',
                     'resend_link' => $fallbackReason . ' Copy the payment link message below instead.',
+                    'generate_paystack_link_send' => $fallbackReason . ' Copy the Paystack payment link message below instead.',
+                    'send_mpesa_instructions' => $fallbackReason . ' Copy the M-Pesa instructions below instead.',
                     default => $fallbackReason . ' Copy the payment instructions below instead.',
                 },
             ],
@@ -510,11 +847,14 @@ class WaOrderController extends Controller
     {
         $storefront = $order->storefront()->first();
         $instructions = ZanaAfricaPayments::instructionsText($storefront, $order) ?? '';
+        $mpesaInstructions = ZanaKenyaPaymentShortcut::instructionText($storefront, $order) ?? $instructions;
         $externalPaymentLink = $paymentLink !== '' ? $paymentLink : (ZanaAfricaPayments::externalPaymentLink($storefront, $order) ?? '');
 
         return match ($paymentAction) {
             'send_reminder' => [trim("Friendly reminder: payment is still pending for order #{$order->id} ({$order->total_display}).\n\n{$instructions}"), 'payment_reminder'],
+            'send_mpesa_instructions' => [trim($mpesaInstructions), 'payment_mpesa_instructions'],
             'resend_link' => [trim("Here is your payment link again for order #{$order->id} ({$order->total_display}).\n\n{$externalPaymentLink}"), 'payment_link'],
+            'generate_paystack_link_send' => [trim("Here is your Paystack payment link for order #{$order->id} ({$order->total_display}).\n\n{$externalPaymentLink}"), 'payment_link'],
             default => [trim("Here are your payment instructions for order #{$order->id} ({$order->total_display}).\n\n{$instructions}"), 'payment_instructions'],
         };
     }

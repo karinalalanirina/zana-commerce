@@ -13,6 +13,7 @@ class ZanaPaymentTemplateFallback
         'send_instructions' => 'payment_instruction_template_id',
         'send_reminder' => 'payment_reminder_template_id',
         'resend_link' => 'payment_instruction_template_id',
+        'generate_paystack_link_send' => 'payment_instruction_template_id',
     ];
 
     public static function selectedTemplateId(?WaStorefront $storefront, string $paymentAction): ?int
@@ -92,6 +93,11 @@ class ZanaPaymentTemplateFallback
             'reason' => ($result['ok'] ?? false) ? 'sent' : 'send_failed',
             'template_name' => (string) ($template->template_name ?? ''),
         ]);
+    }
+
+    public static function requiresTemplateButIsNotConfigured(WaOrder $order, string $paymentAction): bool
+    {
+        return self::selectedTemplateId($order->storefront()->first(), $paymentAction) === null;
     }
 
     public static function buildTemplateVars(WaOrder $order, ?WaStorefront $storefront, string $fallbackMessage, string $paymentLink = ''): array
