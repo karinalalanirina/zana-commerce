@@ -1,4 +1,22 @@
 <x-layouts.user :title="__('More')" nav-key="more" page="user-more-index">
+    @php
+        $moreUser = auth()->user();
+        $moreWorkspace = $moreUser?->currentWorkspace;
+        $moreRole = $moreUser?->workspaceRole();
+        $moreTier = match ($moreRole) {
+            'owner', 'admin' => 'admin',
+            'manager' => 'manager',
+            'agent', 'viewer' => 'agent',
+            default => 'admin',
+        };
+        $moreRankMap = ['agent' => 1, 'manager' => 2, 'admin' => 3];
+        $moreUserRank = $moreRankMap[$moreTier] ?? 3;
+        $moreCanBilling = \App\Support\WorkspacePermissions::userCan($moreUser, 'workspace.billing');
+        $moreCanSettings = \App\Support\WorkspacePermissions::userCan($moreUser, 'workspace.settings');
+        $moreCanAnalytics = \App\Support\WorkspacePermissions::userCan($moreUser, 'analytics.view');
+        $moreCanInvite = \App\Support\WorkspacePermissions::userCan($moreUser, 'member.invite');
+        $moreCanIntegrate = \App\Support\WorkspacePermissions::userCan($moreUser, 'integration.manage');
+    @endphp
 
     <main class="max-w-none mx-auto px-4 sm:px-7 py-7">
 
@@ -17,14 +35,16 @@
                     <span class="w-2 h-2 rounded-full bg-wa-green"></span>
                     Sorted by usage
                 </div>
-                <a href="{{ route('user.developers') }}"
-    class="inline-flex items-center gap-2 rounded-full bg-wa-deep text-paper-0 px-4 py-2 text-[12px] font-semibold hover:bg-wa-teal">
-    <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor"
-        stroke-width="1.7">
-        <path d="M6 4L2.5 8 6 12M10 4l3.5 4L10 12" />
-    </svg>
-    {{ __('Developers / API') }}
-</a>
+                @if ($moreUserRank >= 2)
+                    <a href="{{ route('user.developers') }}"
+                        class="inline-flex items-center gap-2 rounded-full bg-wa-deep text-paper-0 px-4 py-2 text-[12px] font-semibold hover:bg-wa-teal">
+                        <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor"
+                            stroke-width="1.7">
+                            <path d="M6 4L2.5 8 6 12M10 4l3.5 4L10 12" />
+                        </svg>
+                        {{ __('Developers / API') }}
+                    </a>
+                @endif
             </div>
         </div>
 
@@ -107,13 +127,17 @@
                         ? array_values(array_filter($__navCfg['bar'], 'is_string'))
                         : ['dashboard', 'wa-campaigns', 'flows', 'templates', 'metaads', 'devices', 'more'];
                     $__primaryNav = [
-                        'dashboard'    => ['label' => __('Dashboard'), 'href' => url('/dashboard'),   'desc' => __('Home & overview'),       'sw' => 1.6, 'icon' => '<rect x="2" y="2" width="5" height="6" rx="1"/><rect x="9" y="2" width="5" height="3" rx="1"/><rect x="9" y="7" width="5" height="7" rx="1"/><rect x="2" y="10" width="5" height="4" rx="1"/>'],
-                        'wa-campaigns' => ['label' => __('Campaigns'), 'href' => url('/wa-campaigns'), 'desc' => __('Bulk campaign sends'),   'sw' => 1.5, 'icon' => '<path d="M3 4.5A2.5 2.5 0 0 1 5.5 2h5A2.5 2.5 0 0 1 13 4.5v4A2.5 2.5 0 0 1 10.5 11H8l-3.5 2v-2A2.5 2.5 0 0 1 2 8.5v-4Z"/><path d="M5.5 6.5h5M5.5 8.5h3"/>'],
-                        'flows'        => ['label' => __('Flows'),     'href' => url('/flows'),        'desc' => __('Automation builder'),    'sw' => 1.5, 'icon' => '<circle cx="3.5" cy="8" r="1.8"/><circle cx="12.5" cy="3.5" r="1.8"/><circle cx="12.5" cy="12.5" r="1.8"/><path d="M5 7l6-3M5 9l6 3"/>'],
-                        'templates'    => ['label' => __('Templates'), 'href' => url('/templates'),    'desc' => __('Message templates'),     'sw' => 1.5, 'icon' => '<rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M2.5 6h11M6 13.5V6"/>'],
-                        'metaads'      => ['label' => __('Meta Ads'),  'href' => url('/meta-ads'),     'desc' => __('Click-to-WhatsApp ads'), 'sw' => 1.5, 'icon' => '<path d="M2 4l12-2v12L2 12V4Z"/>'],
+                        'dashboard'    => ['label' => __('Dashboard'), 'href' => url('/dashboard'),   'desc' => __('Home & overview'),       'sw' => 1.6, 'icon' => '<rect x="2" y="2" width="5" height="6" rx="1"/><rect x="9" y="2" width="5" height="3" rx="1"/><rect x="9" y="7" width="5" height="7" rx="1"/><rect x="2" y="10" width="5" height="4" rx="1"/>', 'rank' => 2],
+                        'wa-campaigns' => ['label' => __('Campaigns'), 'href' => url('/wa-campaigns'), 'desc' => __('Bulk campaign sends'),   'sw' => 1.5, 'icon' => '<path d="M3 4.5A2.5 2.5 0 0 1 5.5 2h5A2.5 2.5 0 0 1 13 4.5v4A2.5 2.5 0 0 1 10.5 11H8l-3.5 2v-2A2.5 2.5 0 0 1 2 8.5v-4Z"/><path d="M5.5 6.5h5M5.5 8.5h3"/>', 'rank' => 3],
+                        'flows'        => ['label' => __('Flows'),     'href' => url('/flows'),        'desc' => __('Automation builder'),    'sw' => 1.5, 'icon' => '<circle cx="3.5" cy="8" r="1.8"/><circle cx="12.5" cy="3.5" r="1.8"/><circle cx="12.5" cy="12.5" r="1.8"/><path d="M5 7l6-3M5 9l6 3"/>', 'rank' => 3],
+                        'templates'    => ['label' => __('Templates'), 'href' => url('/templates'),    'desc' => __('Message templates'),     'sw' => 1.5, 'icon' => '<rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M2.5 6h11M6 13.5V6"/>', 'rank' => 2],
+                        'metaads'      => ['label' => __('Meta Ads'),  'href' => url('/meta-ads'),     'desc' => __('Click-to-WhatsApp ads'), 'sw' => 1.5, 'icon' => '<path d="M2 4l12-2v12L2 12V4Z"/>', 'rank' => 3],
                     ];
-                    $__demotedNav = array_filter($__primaryNav, fn ($k) => !in_array($k, $__barKeys, true), ARRAY_FILTER_USE_KEY);
+                    $__demotedNav = array_filter(
+                        $__primaryNav,
+                        fn ($n, $k) => !in_array($k, $__barKeys, true) && (($n['rank'] ?? 3) <= $moreUserRank),
+                        ARRAY_FILTER_USE_BOTH,
+                    );
                 @endphp
                 @if (!empty($__demotedNav))
                     <div class="mb-5">
@@ -239,6 +263,7 @@
                     {{-- Quick Send — manual message-queue sender. NOT the 1:1 inbox
  (that's /team-inbox). You compose, pick one or many recipients + a
  device, then send now or schedule, and track per-message delivery. --}}
+                    @if ($moreUserRank >= 2)
                     <a href="{{ url('/chat') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -261,6 +286,7 @@
                                 class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
                     {{-- Developers / API — workspace REST API keys for /api/v1.
                          SaaS-standard placement on the user side. --}}
@@ -290,6 +316,7 @@
                         </div>
                     </a>
 
+                    @if ($moreCanBilling)
                     <a href="{{ url('/account/plans') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -315,7 +342,9 @@
                                 class="text-wa-deep font-semibold group-hover:underline">{{ __('View plans') }}</span>
                         </div>
                     </a>
+                    @endif
 
+                    @if ($moreCanAnalytics)
                     <a href="{{ url('/analytics') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -338,7 +367,9 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
+                    @if ($moreUserRank >= 2)
                     <a href="{{ url('/attributes') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -364,7 +395,9 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
+                    @if ($moreUserRank >= 2)
                     <a href="{{ url('/contacts') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -391,7 +424,9 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
+                    @if ($moreUserRank >= 3)
                     <a href="{{ url('/broadcasts') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -416,7 +451,9 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
+                    @if ($moreUserRank >= 3)
                     <a href="{{ url('/auto-reply') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -441,7 +478,9 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
+                    @if ($moreUserRank >= 3)
                     <a href="{{ url('/warmer') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -464,7 +503,9 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
+                    @if ($moreUserRank >= 2)
                     <a href="{{ url('/scheduled') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -489,7 +530,9 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
+                    @if ($moreUserRank >= 2)
                     <a href="{{ url('/message-history') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -511,6 +554,7 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
                     <a href="{{ url('/notifications') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
@@ -535,6 +579,7 @@
                         </div>
                     </a>
 
+                    @if ($moreCanIntegrate)
                     <a href="{{ url('/integrations') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -556,6 +601,7 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
 
                     {{-- Google account — central place to connect/disconnect the
@@ -572,6 +618,7 @@
                             false,
                         );
                     @endphp
+                    @if ($moreUserRank >= 2)
                     <a href="{{ url('/google-account') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -596,6 +643,7 @@
                                 class="text-wa-deep font-semibold group-hover:underline">{{ $googleConnected ? 'Manage' : 'Connect' }}</span>
                         </div>
                     </a>
+                    @endif
 
                     {{-- AI Call Assistant — voice-AI agent that answers phone calls.
  Config wizard lives here; the actual real-time call loop
@@ -612,6 +660,7 @@
                             ->where('status', 'live')
                             ->count();
                     @endphp
+                    @if ($moreUserRank >= 3)
                     <a href="{{ url('/ai-assistants') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -637,6 +686,7 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
                     {{-- Call Logs — every voice call's transcript + recording + tool
  calls + cost. Read-only; writes come from Node's Twilio
@@ -656,6 +706,7 @@
                                 ->where('started_at', '>=', now()->subDay())
                                 ->sum('duration_seconds') / 60);
                     @endphp
+                    @if ($moreUserRank >= 3)
                     <a href="{{ url('/call-logs') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -680,6 +731,7 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
                     {{-- WhatsApp Forms — Meta-native interactive forms. ONLY shown
  when the workspace is on the WABA engine. Flows are a
@@ -702,7 +754,7 @@
                                 ->count();
                         }
                     @endphp
-                    @if ($_showForms)
+                    @if ($_showForms && $moreUserRank >= 3)
                         <a href="{{ url('/wa-forms') }}"
                             class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                             <div class="flex items-start justify-between gap-3">
@@ -739,6 +791,7 @@
                         $wclCount = (int) \App\Models\WaChatLink::where('workspace_id', $wsForWcl)->count();
                         $wclClicks = (int) \App\Models\WaChatLink::where('workspace_id', $wsForWcl)->sum('click_count');
                     @endphp
+                    @if ($moreUserRank >= 2)
                     <a href="{{ url('/wa-links') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -764,6 +817,7 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
                     {{-- Chatbot Widget — embeddable floating chat bubble for the
  operator's own site. Each widget can be backed by an AI
@@ -775,6 +829,7 @@
                             ->where('status', 'active')
                             ->count();
                     @endphp
+                    @if ($moreUserRank >= 3)
                     <a href="{{ url('/chatbot-widgets') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -803,6 +858,7 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
                     {{-- AI Training — chat assistants + their knowledge sources.
  Powers the chatbot widget (and future text channels). --}}
@@ -812,6 +868,7 @@
                             ->where('status', 'ready')
                             ->count();
                     @endphp
+                    @if ($moreUserRank >= 3)
                     <a href="{{ url('/ai-training') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -836,7 +893,9 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
+                    @if ($moreCanIntegrate)
                     <a href="{{ url('/webhooks') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -859,6 +918,7 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
                     <a href="{{ url('/support') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
@@ -884,6 +944,7 @@
                         </div>
                     </a>
 
+                    @if ($moreUserRank >= 3)
                     <a href="{{ url('/activity-log') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -907,6 +968,7 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
                     <a href="{{ url('/guidebook') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
@@ -932,6 +994,7 @@
                         </div>
                     </a>
 
+                    @if ($moreCanIntegrate)
                     <a href="{{ url('/devices') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -955,7 +1018,9 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
+                    @if ($moreCanInvite)
                     <a href="{{ url('/team-inbox/members') }}"
                         class="group bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card hover:border-wa-deep hover:shadow-soft transition flex flex-col">
                         <div class="flex items-start justify-between gap-3">
@@ -981,6 +1046,7 @@
                             <span class="text-wa-deep font-semibold group-hover:underline">{{ __('Open') }}</span>
                         </div>
                     </a>
+                    @endif
 
                     {{-- Affiliate history card was moved into the right-aside hero slot
  below "Verify HMAC every time" — see further down in this view. --}}
@@ -993,13 +1059,14 @@
                     <div class="flex items-center justify-between mb-3">
                         <span
                             class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-500">{{ __('Recent activity') }}</span>
-                        <a href="{{ url('/activity-log') }}"
-                            class="text-[11px] text-wa-deep font-semibold hover:underline">{{ __('View all') }}</a>
+                        @if ($moreUserRank >= 3)
+                            <a href="{{ url('/activity-log') }}"
+                                class="text-[11px] text-wa-deep font-semibold hover:underline">{{ __('View all') }}</a>
+                        @endif
                     </div>
                     <div class="space-y-3">
                         @forelse ($recentActivity ?? collect() as $r)
-                            <a href="{{ url('/activity-log') }}"
-                                class="flex items-start gap-2.5 -mx-1 px-1 py-0.5 rounded hover:bg-paper-50">
+                            <div class="flex items-start gap-2.5 -mx-1 px-1 py-0.5 rounded {{ $moreUserRank >= 3 ? 'hover:bg-paper-50' : '' }}">
                                 <span
                                     class="w-7 h-7 rounded-lg {{ $r['badgeBg'] }} {{ $r['badgeFg'] }} grid place-items-center shrink-0 text-[10px] font-mono">{{ $r['badge'] }}</span>
                                 <div class="min-w-0 flex-1">
@@ -1008,7 +1075,7 @@
                                     <div class="text-[11px] text-ink-500 font-mono mt-0.5 truncate">
                                         {{ ucfirst($r['category']) }} / {{ $r['when'] }}</div>
                                 </div>
-                            </a>
+                            </div>
                         @empty
                             @include('user.partials.empty-state', [
                                 'message' =>
@@ -1084,14 +1151,19 @@
                     <p class="mt-2 text-[12px] text-paper-0/75 leading-relaxed">
                         {{ __('Less-used tools live here so the main header stays focused on day-to-day work.') }}</p>
                     <div class="mt-3 grid grid-cols-2 gap-2">
+                        @if ($moreUserRank >= 2)
                         <a href="{{ url('/chat') }}"
                             class="rounded-[10px] bg-paper-0/10 hover:bg-paper-0/20 text-[12px] font-semibold px-3 py-2 text-center">{{ __('Open Chat') }}</a>
+                        @endif
+                        @if ($moreUserRank >= 3)
                         <a href="{{ url('/auto-reply/create') }}"
                             class="rounded-[10px] bg-paper-0/10 hover:bg-paper-0/20 text-[12px] font-semibold px-3 py-2 text-center">{{ __('Add rule') }}</a>
+                        @endif
                     </div>
                 </div>
 
                 <!-- Plan card -->
+                @if ($moreCanBilling)
                 <div class="bg-paper-0 border border-paper-200 rounded-[14px] p-4 shadow-card">
                     <div class="flex items-center justify-between">
                         <span
@@ -1126,6 +1198,7 @@
                         </svg>
                     </a>
                 </div>
+                @endif
 
                 <!-- Pro tip carousel -->
                 <div class="bg-paper-0 border border-paper-200 rounded-[14px] p-6 shadow-card">
@@ -1275,6 +1348,7 @@
             <div id="more-shortcuts-grid"
                 data-workspace-id="{{ (int) (auth()->user()->current_workspace_id ?? 0) }}"
                 class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+                @if ($moreUserRank >= 3)
                 <a href="{{ url('/auto-reply/create') }}"
                     class="border border-paper-200 rounded-[10px] p-3 hover:border-wa-deep hover:bg-paper-50 transition flex items-start gap-2.5">
                     <span class="w-8 h-8 rounded-lg bg-wa-mint text-wa-deep grid place-items-center shrink-0">
@@ -1289,6 +1363,8 @@
                             {{ __('Set up a keyword trigger') }}</div>
                     </div>
                 </a>
+                @endif
+                @if ($moreUserRank >= 2)
                 <a href="{{ url('/scheduled/create') }}"
                     class="border border-paper-200 rounded-[10px] p-3 hover:border-wa-deep hover:bg-paper-50 transition flex items-start gap-2.5">
                     <span class="w-8 h-8 rounded-lg bg-[#D9E5F2] text-[#13478A] grid place-items-center shrink-0">
@@ -1304,6 +1380,8 @@
                         </div>
                     </div>
                 </a>
+                @endif
+                @if ($moreCanIntegrate)
                 <a href="{{ url('/webhooks') }}"
                     class="border border-paper-200 rounded-[10px] p-3 hover:border-wa-deep hover:bg-paper-50 transition flex items-start gap-2.5">
                     <span class="w-8 h-8 rounded-lg bg-[#E8F5E9] text-wa-deep grid place-items-center shrink-0">
@@ -1318,6 +1396,8 @@
                         </div>
                     </div>
                 </a>
+                @endif
+                @if ($moreUserRank >= 2)
                 <a href="{{ url('/message-history') }}"
                     class="border border-paper-200 rounded-[10px] p-3 hover:border-wa-deep hover:bg-paper-50 transition flex items-start gap-2.5">
                     <span class="w-8 h-8 rounded-lg bg-paper-100 text-ink-700 grid place-items-center shrink-0">
@@ -1332,6 +1412,7 @@
                         </div>
                     </div>
                 </a>
+                @endif
                 <a href="{{ url('/support') }}"
                     class="border border-paper-200 rounded-[10px] p-3 hover:border-wa-deep hover:bg-paper-50 transition flex items-start gap-2.5">
                     <span

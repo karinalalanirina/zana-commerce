@@ -5,6 +5,9 @@
 
             @php
                 $authUser = auth()->user();
+                $workspaceRole = $authUser?->workspaceRole();
+                $accountCanBilling = \App\Support\WorkspacePermissions::userCan($authUser, 'workspace.billing');
+                $accountCanSettings = \App\Support\WorkspacePermissions::userCan($authUser, 'workspace.settings');
                 $initials = collect(preg_split('/\s+/', trim($authUser->name ?? '?')))
                     ->take(2)
                     ->map(fn($p) => mb_substr($p, 0, 1))
@@ -55,11 +58,13 @@
                             <circle cx="8" cy="6" r="3" />
                             <path d="M2 14c0-3 2.5-5 6-5s6 2 6 5" />
                         </svg>{{ __('Profile') }}</a>
-                    <a data-tab="plan" href="?tab=plan" class="acc-tab"><svg viewBox="0 0 16 16" class="w-3.5 h-3.5"
-                            fill="none" stroke="currentColor" stroke-width="1.6">
-                            <path d="M2 8l6-5 6 5M3.5 7v6h9V7" />
-                            <path d="M6.5 13V9.5h3V13" />
-                        </svg>{{ __('Plan & usage') }}</a>
+                    @if ($accountCanBilling)
+                        <a data-tab="plan" href="?tab=plan" class="acc-tab"><svg viewBox="0 0 16 16"
+                                class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.6">
+                                <path d="M2 8l6-5 6 5M3.5 7v6h9V7" />
+                                <path d="M6.5 13V9.5h3V13" />
+                            </svg>{{ __('Plan & usage') }}</a>
+                    @endif
                     <a data-tab="orders" href="?tab=orders" class="acc-tab"><svg viewBox="0 0 16 16" class="w-3.5 h-3.5"
                             fill="none" stroke="currentColor" stroke-width="1.6">
                             <path d="M2 4h2l1.5 8h7l1-5H6" />
@@ -73,12 +78,14 @@
                         </svg>{{ __('Wallet') }} <span
                             class="ml-auto text-[10px] font-mono text-wa-deep">{{ number_format((int) ($authUser->wallet_credits ?? 0)) }}
                             {{ __('credits') }}</span></a>
-                    <a data-tab="addons" href="?tab=addons" class="acc-tab"><svg viewBox="0 0 16 16" class="w-3.5 h-3.5"
-                            fill="none" stroke="currentColor" stroke-width="1.6">
-                            <rect x="2.5" y="2.5" width="5" height="5" rx="1" />
-                            <rect x="8.5" y="8.5" width="5" height="5" rx="1" />
-                            <path d="M11 3v4M9 5h4" />
-                        </svg>{{ __('Add-ons') }}</a>
+                    @if ($accountCanBilling)
+                        <a data-tab="addons" href="?tab=addons" class="acc-tab"><svg viewBox="0 0 16 16"
+                                class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.6">
+                                <rect x="2.5" y="2.5" width="5" height="5" rx="1" />
+                                <rect x="8.5" y="8.5" width="5" height="5" rx="1" />
+                                <path d="M11 3v4M9 5h4" />
+                            </svg>{{ __('Add-ons') }}</a>
+                    @endif
                     <a data-tab="affiliate" href="?tab=affiliate" class="acc-tab"><svg viewBox="0 0 16 16"
                             class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.6">
                             <path d="M5.5 4.5 3 7l2.5 2.5M10.5 4.5 13 7l-2.5 2.5M7 12l2-8" />
@@ -88,16 +95,18 @@
                             <circle cx="8" cy="8" r="6" />
                             <path d="M5.5 6a2.5 2.5 0 1 1 5 0c0 2-2.5 2-2.5 4M8 12.5h.01" />
                         </svg>{{ __('Support history') }}</a>
-                    <a data-tab="branding" href="?tab=branding" class="acc-tab"><svg viewBox="0 0 16 16"
-                            class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.6">
-                            <rect x="2" y="3" width="12" height="9" rx="1.5" />
-                            <path d="M2 9h12M5 13h6" />
-                        </svg>{{ __('Branding') }}</a>
-                    <a data-tab="translation" href="?tab=translation" class="acc-tab"><svg viewBox="0 0 16 16"
-                            class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.6">
-                            <circle cx="8" cy="8" r="6.5" />
-                            <path d="M1.5 8h13M8 1.5c2 2 2 11 0 13M8 1.5c-2 2-2 11 0 13" />
-                        </svg>{{ __('Translation') }}</a>
+                    @if ($accountCanSettings)
+                        <a data-tab="branding" href="?tab=branding" class="acc-tab"><svg viewBox="0 0 16 16"
+                                class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.6">
+                                <rect x="2" y="3" width="12" height="9" rx="1.5" />
+                                <path d="M2 9h12M5 13h6" />
+                            </svg>{{ __('Branding') }}</a>
+                        <a data-tab="translation" href="?tab=translation" class="acc-tab"><svg viewBox="0 0 16 16"
+                                class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.6">
+                                <circle cx="8" cy="8" r="6.5" />
+                                <path d="M1.5 8h13M8 1.5c2 2 2 11 0 13M8 1.5c-2 2-2 11 0 13" />
+                            </svg>{{ __('Translation') }}</a>
+                    @endif
 
                     <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-500 px-3 pt-3 pb-1.5">
                         {{ __('Security') }}</div>
@@ -112,14 +121,16 @@
                         </svg>{{ __('Delete account') }}</a>
                 </nav>
 
-                <a href="{{ url('/account/plans') }}"
-                    class="block border border-wa-green/30 bg-wa-bubble/50 rounded-2xl p-4 hover:border-wa-deep transition">
-                    <div class="font-serif text-[14px] leading-tight text-wa-deep">{{ __('Upgrade to Growth') }}</div>
-                    <p class="text-[11px] text-ink-700 mt-1 leading-snug">
-                        {{ __('Unlock unlimited campaigns, 5 devices, and AI-assist.') }}</p>
-                    <span
-                        class="inline-flex items-center gap-1 mt-2 text-[11px] font-semibold text-wa-deep">{{ __('See plans →') }}</span>
-                </a>
+                @if ($accountCanBilling)
+                    <a href="{{ url('/account/plans') }}"
+                        class="block border border-wa-green/30 bg-wa-bubble/50 rounded-2xl p-4 hover:border-wa-deep transition">
+                        <div class="font-serif text-[14px] leading-tight text-wa-deep">{{ __('Upgrade to Growth') }}</div>
+                        <p class="text-[11px] text-ink-700 mt-1 leading-snug">
+                            {{ __('Unlock unlimited campaigns, 5 devices, and AI-assist.') }}</p>
+                        <span
+                            class="inline-flex items-center gap-1 mt-2 text-[11px] font-semibold text-wa-deep">{{ __('See plans →') }}</span>
+                    </a>
+                @endif
             </aside>
 
             <!-- MAIN -->
@@ -275,10 +286,12 @@
                 </div>
 
                 <!-- ============ PLAN & USAGE ============ -->
-                <div data-pane="plan" class="space-y-5 hidden">
-                    {{-- Fully dynamic — plan, monthly usage, limit meters, unlocked vs locked features --}}
-                    <x-plan-usage :workspace="$authUser->currentWorkspace" :detailed="true" />
-                </div>
+                @if ($accountCanBilling)
+                    <div data-pane="plan" class="space-y-5 hidden">
+                        {{-- Fully dynamic — plan, monthly usage, limit meters, unlocked vs locked features --}}
+                        <x-plan-usage :workspace="$authUser->currentWorkspace" :detailed="true" />
+                    </div>
+                @endif
 
                 <!-- ============ ORDER HISTORY ============ -->
                 <div data-pane="orders" class="space-y-4 hidden">
@@ -303,8 +316,11 @@ $lifetimeCurrency =
                         </div>
                         @if ($orders->isEmpty())
                             <div class="px-5 py-10 text-center text-[12.5px] text-ink-500 italic">
-                                No orders yet. <a href="{{ url('/account/plans') }}"
-                                    class="text-wa-deep font-semibold hover:underline">{{ __('Browse plans →') }}</a>
+                                {{ __('No orders yet.') }}
+                                @if ($accountCanBilling)
+                                    <a href="{{ url('/account/plans') }}"
+                                        class="text-wa-deep font-semibold hover:underline">{{ __('Browse plans →') }}</a>
+                                @endif
                             </div>
                         @else
                             <div class="overflow-x-auto">
@@ -687,6 +703,7 @@ $lifetimeCurrency =
                 <!-- ============ AFFILIATE ============ -->
                 {{-- ADD-ONS tab — extra feature packs bought on top of the plan
                      (gated to active-plan workspaces, like credit top-ups). --}}
+                @if ($accountCanBilling)
                 <div data-pane="addons" class="space-y-5 hidden">
                     @php $addonCatalog = \App\Models\Package::featureCatalog(); @endphp
                     @if (!($hasActivePlan ?? false))
@@ -748,6 +765,7 @@ $lifetimeCurrency =
                         </div>
                     @endif
                 </div>
+                @endif
 
                 <div data-pane="affiliate" class="space-y-5 hidden">
                     <div class="bg-paper-0 border border-paper-200 rounded-2xl p-6 shadow-card">
@@ -996,6 +1014,7 @@ $lifetimeCurrency =
                     $brandingPlatformFooter = (string) \App\Models\SystemSetting::get('platform_branding_footer', '');
                     $brandingCurrent = (string) ($ws->branding_footer ?? '');
                 @endphp
+                @if ($accountCanSettings)
                 <div data-pane="branding" class="hidden">
                     <div class="bg-paper-0 border border-paper-200 rounded-2xl p-6 shadow-card max-w-2xl">
                         <h3 class="font-serif text-[20px] mb-1">{{ __('Message footer') }}</h3>
@@ -1079,13 +1098,16 @@ $lifetimeCurrency =
                                         class="font-semibold">{{ __('Upgrade to remove the platform footer.') }}</strong>
                                     Your current plan uses the platform's default footer on outbound messages. Premium
                                     plans unlock a custom footer (or no footer at all).
-                                    <a href="{{ url('/account/plans') }}"
-                                        class="ml-1 underline font-semibold">{{ __('See plans →') }}</a>
+                                    @if ($accountCanBilling)
+                                        <a href="{{ url('/account/plans') }}"
+                                            class="ml-1 underline font-semibold">{{ __('See plans →') }}</a>
+                                    @endif
                                 </div>
                             </div>
                         @endif
                     </div>
                 </div>
+                @endif
 
                 <!-- ============ TRANSLATION ============ -->
                 @php
@@ -1101,6 +1123,7 @@ $lifetimeCurrency =
                     $xlateCount = (int) \App\Models\TranslationUsage::query()->where('workspace_id', $ws->id)->where('called_at', '>=', $xlateMonthStart)->count();
                     $isPlatformAdmin = (bool) (auth()->user()->is_admin ?? false);
                 @endphp
+                @if ($accountCanSettings)
                 <div data-pane="translation" class="hidden space-y-4">
 
                     {{-- How it works --}}
@@ -1177,10 +1200,13 @@ $lifetimeCurrency =
                         <div class="rounded-lg border border-[#B45309]/30 bg-[#FFFBEB] text-[#92400E] px-4 py-3 text-[12.5px]">
                             <strong class="font-semibold">{{ __('Upgrade to unlock real-time translation.') }}</strong>
                             {{ __('Auto-translate WhatsApp conversations between your team\'s language and your customers\' languages.') }}
-                            <a href="{{ url('/account/plans') }}" class="ml-1 underline font-semibold">{{ __('See plans →') }}</a>
+                            @if ($accountCanBilling)
+                                <a href="{{ url('/account/plans') }}" class="ml-1 underline font-semibold">{{ __('See plans →') }}</a>
+                            @endif
                         </div>
                     @endif
                 </div>
+                @endif
 
                 <!-- ============ CHANGE PASSWORD ============ -->
                 <div data-pane="password" class="hidden">
@@ -1302,9 +1328,11 @@ $lifetimeCurrency =
                                                 class="text-wa-deep font-semibold hover:underline">{{ __('Spend your remaining credits') }}</a>
                                             · {{ number_format((int) ($authUser->wallet_credits ?? 0)) }}
                                             {{ __('credits will be lost otherwise') }}</li>
-                                        <li><a href="{{ url('/account/plans') }}"
-                                                class="text-wa-deep font-semibold hover:underline">{{ __('Downgrade to free') }}</a>
-                                            instead of deleting</li>
+                                        @if ($accountCanBilling)
+                                            <li><a href="{{ url('/account/plans') }}"
+                                                    class="text-wa-deep font-semibold hover:underline">{{ __('Downgrade to free') }}</a>
+                                                instead of deleting</li>
+                                        @endif
                                         <li><a href="{{ url('/support') }}"
                                                 class="text-wa-deep font-semibold hover:underline">{{ __('Contact support') }}</a>
                                             if you're hitting an issue we can fix</li>
