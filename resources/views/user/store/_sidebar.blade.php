@@ -1,44 +1,60 @@
 @php
     $hideIndiaMerchantPayments = (bool) config('zana.hide_india_merchant_payments', true);
+    $wsId = auth()->user()->current_workspace_id ?? 0;
+    $safeCount = static function (string $table, callable $resolver) {
+        try {
+            if (!\Illuminate\Support\Facades\Schema::hasTable($table)) {
+                return 0;
+            }
+
+            return (int) $resolver();
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    };
     $tabs = [
         'overview' => ['Overview', 'M2 11l3-5 3 3 3-6 3 4', null],
         'orders' => [
             'Orders',
             'M2 4h2l1.5 8h7l1-5H6 M6 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M11 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
-            \App\Models\WaOrder::forWorkspace(auth()->user()->current_workspace_id ?? 0)->count(),
+            $safeCount('wa_orders', fn () => \App\Models\WaOrder::forWorkspace($wsId)->count()),
         ],
         'products' => [
             'Products',
             'M2 5l6-3 6 3v6l-6 3-6-3z M2 5l6 3 6-3 M8 8v6',
-            \App\Models\WaProduct::forWorkspace(auth()->user()->current_workspace_id ?? 0)->count(),
+            $safeCount('wa_products', fn () => \App\Models\WaProduct::forWorkspace($wsId)->count()),
         ],
         'groups' => [
             'Groups',
             'M5 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4z M11 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4z M1.5 13c0-2 1.3-3 3.5-3s3.5 1 3.5 3 M7.5 13c0-2 1.3-3 3.5-3s3.5 1 3.5 3',
-            \App\Models\WaGroup::where('workspace_id', auth()->user()->current_workspace_id ?? 0)->count(),
+            $safeCount('wa_groups', fn () => \App\Models\WaGroup::where('workspace_id', $wsId)->count()),
         ],
         'storefront' => ['Storefront', 'M2 5h12v8H2z M2 8h12 M5 5v3', null],
         'coupons' => [
             'Coupons',
             'M2 6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2 1.5 1.5 0 0 0 0 4 2 2 0 0 1-2 2H4a2 2 0 0 1-2-2 1.5 1.5 0 0 0 0-4z M9 5l-2 6',
-            \App\Models\WaCoupon::where('workspace_id', auth()->user()->current_workspace_id ?? 0)->count(),
+            $safeCount('wa_coupons', fn () => \App\Models\WaCoupon::where('workspace_id', $wsId)->count()),
         ],
         'reviews' => [
             'Reviews',
             'M8 2l1.8 3.6L14 6.2l-3 2.9.7 4.1L8 11.3 4.3 13.2 5 9.1 2 6.2l4.2-.6z',
-            \App\Models\WaProductReview::where('workspace_id', auth()->user()->current_workspace_id ?? 0)
-                ->where('status', 'pending')
-                ->count(),
+            $safeCount(
+                'wa_product_reviews',
+                fn () => \App\Models\WaProductReview::where('workspace_id', $wsId)->where('status', 'pending')->count(),
+            ),
         ],
         'payments' => [
             'Payments',
             'M1.5 4.5h13v7h-13z M1.5 7h13 M4 9.5h3',
-            \App\Models\WorkspacePaymentConfig::where('workspace_id', auth()->user()->current_workspace_id ?? 0)->count(),
+            $safeCount(
+                'workspace_payment_configs',
+                fn () => \App\Models\WorkspacePaymentConfig::where('workspace_id', $wsId)->count(),
+            ),
         ],
         'customers' => [
             'Customers',
             'M8 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z M2.5 14c0-2.5 2.2-4 5.5-4s5.5 1.5 5.5 4',
-            \App\Models\WaCustomerProfile::where('workspace_id', auth()->user()->current_workspace_id ?? 0)->count(),
+            $safeCount('wa_customer_profiles', fn () => \App\Models\WaCustomerProfile::where('workspace_id', $wsId)->count()),
         ],
     ];
     $current = $current ?? request()->segment(2) ?: 'overview';
