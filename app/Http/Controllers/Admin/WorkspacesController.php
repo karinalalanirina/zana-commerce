@@ -8,6 +8,7 @@ use App\Models\Message;
 use App\Models\Package;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\AdminWorkspaceMembershipSync;
 use App\Support\Audit;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -146,9 +147,7 @@ class WorkspacesController extends Controller
         ]);
 
         $owner = User::find($ownerId);
-        if (!$owner->current_workspace_id) {
-            $owner->update(['current_workspace_id' => $ws->id]);
-        }
+        AdminWorkspaceMembershipSync::syncWorkspaceOwner($ws, $owner);
 
         Audit::log('admin.workspace.created', [
             'resource' => $ws,
@@ -333,6 +332,8 @@ class WorkspacesController extends Controller
             'pre_seed_sample_data'    => $request->boolean('pre_seed_sample_data'),
             'admin_note'              => $data['admin_note'] ?? null,
         ])->save();
+
+        AdminWorkspaceMembershipSync::syncWorkspaceOwner($ws, User::find($ws->owner_user_id));
 
         Audit::log('admin.workspace.updated', [
             'resource' => $ws,

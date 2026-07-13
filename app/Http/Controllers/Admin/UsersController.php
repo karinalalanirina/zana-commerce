@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\Rule;
 use App\Support\Audit;
+use App\Support\AdminWorkspaceMembershipSync;
 use App\Support\PlatformPermissions;
 
 class UsersController extends Controller
@@ -109,6 +110,12 @@ class UsersController extends Controller
             'email_verified_at'     => $request->boolean('active') ? now() : null,
         ]);
 
+        AdminWorkspaceMembershipSync::syncUserAssignment(
+            $user,
+            !empty($data['workspace_id']) ? Workspace::find($data['workspace_id']) : null,
+            $data['role'] ?? null
+        );
+
         // Welcome email — only when the toggle is on. Returns null on success,
         // a skip-reason string when mail is unconfigured / fails (we still create
         // the user successfully; the admin just sees a notice).
@@ -198,6 +205,12 @@ class UsersController extends Controller
             $newPlainPassword = $data['password'];
         }
         $user->save();
+
+        AdminWorkspaceMembershipSync::syncUserAssignment(
+            $user,
+            !empty($data['workspace_id']) ? Workspace::find($data['workspace_id']) : null,
+            $data['role'] ?? null
+        );
 
         $mailNotice = null;
         if ($request->boolean('welcome_email')) {
