@@ -303,7 +303,7 @@
         </button>
         <button type="button" data-import-meta
             class="px-4 py-2 rounded-full border border-paper-200 hover:bg-paper-50 text-[12.5px] font-medium inline-flex items-center gap-2"
-            title="{{ __('Pull products created directly in Meta Commerce Manager into WaDesk.') }}">
+            title="{{ __('Pull products created directly in Meta Commerce Manager into Zana.') }}">
             <svg viewBox="0 0 16 16" class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="1.7">
                 <path d="M8 2v8M5 7l3 3 3-3M2.5 13.5h11" />
             </svg>
@@ -607,7 +607,7 @@
             });
 
             // Import FROM Meta — pull products built directly in Commerce Manager
-            // into WaDesk (WaDesk only pushes up, so a Meta-side catalog shows 0).
+            // into Zana when the catalog was created on the Meta side first.
             const $importMeta = document.querySelector('[data-import-meta]');
             $importMeta?.addEventListener('click', async () => {
                 $importMeta.disabled = true;

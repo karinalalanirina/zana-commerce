@@ -1217,7 +1217,7 @@
                         }
                     @endphp
 
-                    {{-- Sheets add-on API key (the ONLY personal API key WaDesk currently exposes) --}}
+                    {{-- Sheets add-on API key (the only personal API key this workspace currently exposes) --}}
                     <div class="bg-paper-0 border border-paper-200 rounded-2xl shadow-card overflow-hidden">
                         <div
                             class="px-5 py-4 border-b border-paper-200 flex items-center justify-between gap-3 flex-wrap">
@@ -1313,7 +1313,7 @@
                 <!-- DATA -->
                 <div data-pane="data" class="space-y-5 hidden">
                     @php
-                        // WaDesk legacy model: contacts.user_id (per-user), conversations.workspace_id.
+                        // Legacy model: contacts.user_id (per-user), conversations.workspace_id.
                         // Workspace contacts = contacts whose user_id belongs to any
                         // user in this workspace (via workspace_user pivot).
                         $contactCount = 0;

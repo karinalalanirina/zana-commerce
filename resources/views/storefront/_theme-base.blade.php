@@ -800,7 +800,7 @@ $freeText = \App\Support\ZanaStorefrontCurrency::formatStorefrontMinor($freeMino
         </div>
         <div class="sf-foot-bottom">
             <span>{{ $footer }}</span>
-            <span>{{ __('Powered by') }} <a href="https://wadesk.app"
+            <span>{{ __('Powered by') }} <a href="https://zana.co"
                     target="_blank">{{ brand_name() }}</a></span>
         </div>
     </footer>

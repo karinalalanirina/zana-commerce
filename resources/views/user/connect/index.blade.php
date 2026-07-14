@@ -106,7 +106,7 @@
                                 <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-500 mb-1">
                                     {{ __('Webhook URL · auto-configured') }}</div>
                                 <div class="font-mono text-[11px] text-ink-700 break-all" id="webhook-url">
-                                    https://api.wadesk.app/webhooks/&lt;your-store&gt;</div>
+                                    https://zana.co/webhooks/&lt;your-store&gt;</div>
                             </div>
 
                             <!-- Buttons -->

@@ -569,7 +569,7 @@
         // Test-connection button — hits /health with the user's API key so
         // they can verify the same request the Apps Script will make actually
         // resolves. Surfaces user + workspace + server time so the user can
-        // confirm the add-on is hitting the right WaDesk deployment.
+        // confirm the add-on is hitting the right Zana deployment.
         (function() {
             const btn = document.querySelector('[data-test-connection]');
             if (!btn) return;

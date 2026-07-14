@@ -341,7 +341,7 @@
             <div class="flex items-center justify-between gap-4">
                 <div>
                     <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-500">{{ __('Advanced operational widgets') }}</div>
-                    <div class="mt-1 text-[13px] text-ink-600">{{ __('Expand to view the full legacy WaDesk operator dashboard without removing any existing tools.') }}</div>
+                    <div class="mt-1 text-[13px] text-ink-600">{{ __('Expand to view the full legacy operator dashboard without removing any existing tools.') }}</div>
                 </div>
                 <span class="inline-flex items-center gap-2 rounded-full border border-paper-200 bg-paper-50 px-3 py-2 text-[12px] font-semibold text-ink-700">
                     {{ __('Expand') }}
